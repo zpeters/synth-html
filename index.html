@@ -2526,12 +2526,19 @@ document.getElementById('help-overlay').addEventListener('click',e=>{
 // ─── Share / URL encoding ─────────────────────────────────────────────
 let _shareUrl = '';
 
+const _adjectives = ['amber','violet','cosmic','frozen','liquid','electric','fuzzy','warped','hollow','silky','dusty','glassy','muted','radiant','smoky','velvet','distant','drifting','droning','pulsing'];
+const _nouns      = ['drift','nebula','chorus','cascade','shimmer','static','current','echo','surge','void','bloom','wave','fog','prism','oscillation','pulse','resonance','signal','tone','flux'];
+function randomPatchName() {
+  const a = _adjectives[Math.floor(Math.random() * _adjectives.length)];
+  const n = _nouns[Math.floor(Math.random() * _nouns.length)];
+  return a + ' ' + n;
+}
+
 function shareLink() {
   const graph = serializeGraph();
-  const suggestedName = activeUserPreset || '';
-  const name = prompt('Patch name:', suggestedName);
-  if (name === null) return; // cancelled
-  const payload = { name: name.trim(), ...graph };
+  // Use saved preset name if active; otherwise generate a random one — no prompt
+  const name = activeUserPreset || randomPatchName();
+  const payload = { name, ...graph };
   const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
   const url = location.href.split('#')[0] + '#patch=' + encoded;
   _shareUrl = url;
