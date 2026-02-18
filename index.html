@@ -89,11 +89,16 @@
   .param-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px; }
   .param-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
   .param-input {
-    background: #0f1117; border: 1px solid #30363d; border-radius: 3px;
-    color: #c9d1d9; font-family: inherit; font-size: 11px; padding: 2px 6px;
-    width: 90px; text-align: right; outline: none; transition: border-color 0.15s;
+    background: #0d1117; border: 1px solid #21262d; border-radius: 3px;
+    color: #79c0ff; font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 3px 7px;
+    width: 76px; text-align: right; outline: none; transition: border-color 0.15s, color 0.15s;
+    cursor: ns-resize; user-select: none; -moz-appearance: textfield;
   }
-  .param-input:focus { border-color: #c97bff; }
+  .param-input:focus { border-color: #c97bff; color: #e0e0e0; cursor: text; }
+  .param-input:hover:not(:focus) { border-color: #444d56; color: #a8d8ff; }
+  /* Hide browser spinners */
+  .param-input::-webkit-outer-spin-button,
+  .param-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .param-select {
     background: #0f1117; border: 1px solid #30363d; border-radius: 3px;
     color: #c9d1d9; font-family: inherit; font-size: 10px; padding: 2px 4px; width: 90px; outline: none;
@@ -2143,6 +2148,38 @@ document.addEventListener('wheel', e => {
   }
   requestAnimationFrame(tick);
 })();
+
+// ─── Drag-to-change number inputs ────────────────────────────────────
+{
+  let dragInput=null, dragStartY=0, dragStartVal=0;
+  document.addEventListener('mousedown', e=>{
+    const inp=e.target.closest('input.param-input[type="number"]');
+    if(!inp || e.detail===2) return; // double-click = allow text edit
+    e.preventDefault();
+    dragInput=inp; dragStartY=e.clientY;
+    dragStartVal=parseFloat(inp.value)||0;
+    inp.blur();
+  });
+  document.addEventListener('mousemove', e=>{
+    if(!dragInput) return;
+    const step=parseFloat(dragInput.step)||1;
+    const min=dragInput.min!==''?parseFloat(dragInput.min):-Infinity;
+    const max=dragInput.max!==''?parseFloat(dragInput.max):Infinity;
+    const sensitivity=e.shiftKey?step*0.1:step; // shift = fine control
+    const delta=(dragStartY-e.clientY)*sensitivity*0.5;
+    const decimals=step<1?String(step).split('.')[1]?.length||2:0;
+    const newVal=Math.min(max,Math.max(min,parseFloat((dragStartVal+delta).toFixed(decimals))));
+    dragInput.value=newVal;
+    dragInput.dispatchEvent(new Event('change',{bubbles:true}));
+    dragInput.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  document.addEventListener('mouseup', ()=>{ dragInput=null; });
+  // Double-click → select all for typing
+  document.addEventListener('dblclick', e=>{
+    const inp=e.target.closest('input.param-input[type="number"]');
+    if(inp){ inp.focus(); inp.select(); }
+  });
+}
 
 // ─── Help Modal ───────────────────────────────────────────────────────
 const HELP_SEEN_KEY='synth_html_help_seen';
