@@ -221,6 +221,7 @@
       <option value="stereopan">Stereo Pan</option>
       <option value="pingpong">Ping-Pong Echo</option>
       <option value="keyjam">Keyboard Jam</option>
+      <option value="envdemo">Envelope ADSR</option>
     </optgroup>
     <optgroup label="Saved" id="user-preset-group"></optgroup>
   </select>
@@ -1988,6 +1989,30 @@ function loadPreset(name){
         addEdge(flt,'signal', rev,'signal');
         addEdge(rev,'signal', spk,'signal');
         addEdge(flt,'signal', scp,'signal');
+        renderEdges();
+      },50); break;
+    }
+
+    case'envdemo': {
+      // Envelope ADSR demo — keyboard gates an ADSR amp envelope
+      // Chain: KB freq→OSC  KB gate→ENV  OSC→ENV→filter→reverb→speaker
+      // The envelope shapes the volume of each note: attack/decay/sustain/release
+      // Try: short attack (punchy), long release (pad-like), sustain=0 (pluck)
+      const kb  = createNode('keyboard',   30,  90);
+      const osc = createNode('oscillator', 270,  90, {freq:261.6, wave:'triangle'});
+      const env = createNode('envelope',   500,  90, {attack:0.02, decay:0.12, sustain:0.65, release:0.55});
+      const flt = createNode('filter',     730,  90, {type:'lowpass', freq:2200, q:2});
+      const rev = createNode('reverb',     730, 270, {duration:1.5, decay:1.0, wet:0.25});
+      const spk = createNode('speaker',    940, 175);
+      const scp = createNode('oscilloscope',940, 320, {mode:'phosphor'});
+      setTimeout(()=>{
+        addEdge(kb, 'freq',   osc,'freq');    // keyboard sets pitch
+        addEdge(kb, 'gate',   env,'gate');    // keyboard gates envelope (amber dashed wire)
+        addEdge(osc,'signal', env,'signal');  // osc audio passes through envelope
+        addEdge(env,'signal', flt,'signal');
+        addEdge(flt,'signal', rev,'signal');
+        addEdge(rev,'signal', spk,'signal');
+        addEdge(env,'signal', scp,'signal');  // scope shows envelope-shaped waveform
         renderEdges();
       },50); break;
     }
