@@ -191,6 +191,12 @@
   100% { transform: scale(1, 1); }
 }
 .node-land { animation: node-land 0.28s ease-out forwards; }
+@keyframes node-delete {
+  0%   { transform: scale(1);    opacity: 1; filter: brightness(1); }
+  20%  { transform: scale(1.04); opacity: 1; filter: brightness(1.5) hue-rotate(20deg); }
+  100% { transform: scale(0.8);  opacity: 0; filter: brightness(0.5); }
+}
+.node-delete { animation: node-delete 0.22s ease-in forwards; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -324,6 +330,9 @@
     <div class="palette-item pi-effect" draggable="true" data-type="mixer">
       <div class="item-name">Mixer</div><div class="item-desc">3-channel sum + gain</div>
     </div>
+    <div class="palette-item pi-effect" draggable="true" data-type="envelope">
+      <div class="item-name">Envelope</div><div class="item-desc">ADSR amp shape</div>
+    </div>
   </div>
   <div class="palette-section">
     <div class="palette-label">Modulators</div>
@@ -396,7 +405,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   keyboard: {
-    label:'Keyboard', color:'#c97bff', kind:'source', ins:[], outs:['freq'],
+    label:'Keyboard', color:'#c97bff', kind:'source', ins:[], outs:['freq','gate'],
     minWidth: 220,
     params: { octave: 4 },
     renderBody(id, p) {
@@ -419,6 +428,28 @@ const NODE_DEFS = {
     </div>
     <div style="font-size:9px;color:#484f58;margin-top:4px">A-K = white keys · W E T Y U = black</div>`;
     }
+  },
+  envelope: {
+    label:'Envelope', color:'#d6a058', kind:'effect', ins:['signal','gate'], outs:['signal'],
+    params:{ attack:0.01, decay:0.15, sustain:0.7, release:0.4 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Attack</span>
+        <input class="param-input" type="number" min="0.001" max="4" step="0.01" value="${p.attack}"
+          onchange="updateParam('${id}','attack',+this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Decay</span>
+        <input class="param-input" type="number" min="0.001" max="4" step="0.01" value="${p.decay}"
+          onchange="updateParam('${id}','decay',+this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Sustain</span>
+        <input class="param-input" type="range" min="0" max="1" step="0.01" value="${p.sustain}"
+          style="width:76px" oninput="updateParam('${id}','sustain',+this.value);document.getElementById('${id}-susval').textContent=(+this.value*100|0)+'%'">
+        <span id="${id}-susval" style="color:#6e7681;width:30px;text-align:right">${(p.sustain*100|0)}%</span>
+      </div>
+      <div class="param-row"><span class="param-label">Release</span>
+        <input class="param-input" type="number" min="0.001" max="8" step="0.01" value="${p.release}"
+          onchange="updateParam('${id}','release',+this.value)">
+      </div>`; }
   },
   gain: {
     label:'Gain', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
@@ -806,6 +837,11 @@ function kbPress(nodeId, semi) {
     el.style.background = el.classList.contains('kb-black') ? '#5da0d0' : '#b3d4ff';
   });
   edges.filter(e => e.srcNode === nodeId).forEach(e => {
+    if (e.srcPort === 'gate') {
+      // Gate: trigger envelope attack on the connected node
+      if (nodes[e.dstNode]?.type === 'envelope') envAttack(e.dstNode);
+      return;
+    }
     const an = audioNodes[e.dstNode];
     if (an?.main?.frequency) an.main.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.005);
     if (nodes[e.dstNode]?.params?.freq !== undefined) nodes[e.dstNode].params.freq = freq;
@@ -817,6 +853,33 @@ function kbRelease(nodeId, semi) {
   document.querySelectorAll(`#${nodeId}-kb [data-semi="${semi}"]`).forEach(el => {
     el.style.background = el.classList.contains('kb-black') ? '#222' : '#e8e8e8';
   });
+  // Trigger release on any connected envelope
+  edges.filter(e => e.srcNode === nodeId && e.srcPort === 'gate').forEach(e => {
+    if (nodes[e.dstNode]?.type === 'envelope') envRelease(e.dstNode);
+  });
+}
+
+// ─── Envelope ADSR helpers ──────────────────────────────────────────
+function envAttack(nodeId) {
+  if (!audioCtx || !audioNodes[nodeId]) return;
+  const g = audioNodes[nodeId].main.gain;
+  const p = nodes[nodeId]?.params;
+  if (!p) return;
+  const t = audioCtx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(1.0, t + +p.attack);
+  g.linearRampToValueAtTime(+p.sustain, t + +p.attack + +p.decay);
+}
+function envRelease(nodeId) {
+  if (!audioCtx || !audioNodes[nodeId]) return;
+  const g = audioNodes[nodeId].main.gain;
+  const p = nodes[nodeId]?.params;
+  if (!p) return;
+  const t = audioCtx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(0, t + +p.release);
 }
 
 // ─── Sequencer helpers ───────────────────────────────────────────────
@@ -973,9 +1036,24 @@ function addEdge(sN,sP,dN,dP) {
 }
 function deleteEdge(idx){edges.splice(idx,1);renderEdges();updateStats();}
 function deleteNode(id){
-  edges=edges.filter(e=>e.srcNode!==id&&e.dstNode!==id);
-  document.getElementById(id)?.remove(); delete nodes[id];
-  renderEdges(); updateStats();
+  // Flash-delete connected wires first
+  edgeEls.forEach(({pathEl,hitEl,edge})=>{
+    if(edge.srcNode===id||edge.dstNode===id){
+      pathEl.style.transition='stroke 0.12s, opacity 0.18s';
+      pathEl.style.stroke='#f85149'; pathEl.style.opacity='0';
+      hitEl.style.pointerEvents='none';
+    }
+  });
+  const el=document.getElementById(id);
+  const doRemove=()=>{
+    edges=edges.filter(e=>e.srcNode!==id&&e.dstNode!==id);
+    el?.remove(); delete nodes[id];
+    renderEdges(); updateStats();
+  };
+  if(el){
+    el.classList.add('node-delete');
+    el.addEventListener('animationend', doRemove, {once:true});
+  } else { doRemove(); }
 }
 function selectNode(id){
   if(selectedNode) document.getElementById(selectedNode)?.classList.remove('selected');
@@ -1007,7 +1085,8 @@ function renderEdges(){
     const src=getPortPos(edge.srcNode,edge.srcPort,'out');
     const dst=getPortPos(edge.dstNode,edge.dstPort,'in');
     const d=bezier(src.x,src.y,dst.x,dst.y);
-    const color=nodes[edge.srcNode].def.color;
+    const isGate = edge.srcPort==='gate'||edge.dstPort==='gate';
+    const color = isGate ? '#d6a058' : nodes[edge.srcNode].def.color;
 
     function grabEdge(e){
       e.preventDefault(); e.stopPropagation();
@@ -1029,6 +1108,7 @@ function renderEdges(){
 
     const path=document.createElementNS('http://www.w3.org/2000/svg','path');
     path.classList.add('edge-path'); path.setAttribute('d',d); path.setAttribute('stroke',color);
+    if(isGate) path.setAttribute('stroke-dasharray','6 4');
     path.addEventListener('mousedown', grabEdge);
     svgLayer.insertBefore(path,previewPath);
 
@@ -1255,13 +1335,19 @@ function startAudio(){
         audioNodes[n.id]={main:null,input:null,output:null};
         break;
       }
+      case'envelope':{
+        const envGain=audioCtx.createGain(); envGain.gain.value=0;
+        audioNodes[n.id]={main:envGain,input:envGain,output:envGain};
+        break;
+      }
     }
   });
 
-  // Wire edges (skip sequencer — it drives oscillators via JS timing)
+  // Wire edges (skip sequencer/keyboard non-audio ports)
   edges.forEach(edge=>{
     if(nodes[edge.srcNode]?.type==='sequencer') return; // handled separately
     if(nodes[edge.srcNode]?.type==='keyboard') return; // handled via kbPress JS events
+    if(edge.srcPort==='gate'||edge.dstPort==='gate') return; // gate is a control signal, not audio
     const src=audioNodes[edge.srcNode], dst=audioNodes[edge.dstNode];
     if(!src||!dst) return;
     // AudioParam modulation (e.g. freq_mod → filter.frequency)
@@ -2402,6 +2488,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => {
   const semi = QWERTY_MAP[e.key.toLowerCase()];
   if (semi !== undefined && activeKbNode) kbRelease(activeKbNode, semi);
+  // Also handle non-note keys that might leave envelopes hanging
 });
 
 // ─── Init ─────────────────────────────────────────────────────────────
