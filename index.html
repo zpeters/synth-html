@@ -204,8 +204,7 @@
     </optgroup>
     <optgroup label="Saved" id="user-preset-group"></optgroup>
   </select>
-  <button class="tb-btn" id="btn-save"    onclick="saveCurrentPreset()" style="border-color:#c97bff;color:#c97bff;opacity:0.4" disabled>Save</button>
-  <button class="tb-btn" id="btn-saveas" onclick="savePresetAs()"      style="border-color:#c97bff;color:#c97bff">Save As…</button>
+  <button class="tb-btn" id="btn-save"   onclick="savePreset()"        style="border-color:#c97bff;color:#c97bff">Save</button>
   <button class="tb-btn" id="btn-delete" onclick="deleteCurrentPreset()" style="border-color:#f85149;color:#f85149;opacity:0.4" disabled>Delete</button>
   <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
     <span style="font-size:10px; color:#484f58;">VOL</span>
@@ -484,7 +483,8 @@ let dragging=null, dragOffset={x:0,y:0};
 let connecting=null, previewPath=null, selectedNode=null;
 let audioCtx=null, audioNodes={}, masterGain=null;
 let rafId=null;
-let seqState={}; // { [nodeId]: { step, intervalId } }
+let seqState={};
+let canvasScale=1.0; // { [nodeId]: { step, intervalId } }
 
 const canvasEl = document.getElementById('canvas-area');
 const svgLayer = document.getElementById('svg-layer');
@@ -623,8 +623,8 @@ function onHeaderMousedown(e) {
 document.addEventListener('mousemove', e => {
   if (dragging) {
     const cr = canvasEl.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - cr.left - dragOffset.x);
-    const y = Math.max(0, e.clientY - cr.top  - dragOffset.y);
+    const x = Math.max(0, (e.clientX - cr.left - dragOffset.x) / canvasScale);
+    const y = Math.max(0, (e.clientY - cr.top  - dragOffset.y) / canvasScale);
     const el = document.getElementById(dragging);
     el.style.left = x+'px'; el.style.top = y+'px';
     nodes[dragging].x = x; nodes[dragging].y = y;
@@ -632,7 +632,7 @@ document.addEventListener('mousemove', e => {
   }
   if (connecting) {
     const cr = canvasEl.getBoundingClientRect();
-    const mx = e.clientX-cr.left, my = e.clientY-cr.top;
+    const mx = (e.clientX-cr.left)/canvasScale, my = (e.clientY-cr.top)/canvasScale;
     if (!previewPath) {
       previewPath = document.createElementNS('http://www.w3.org/2000/svg','path');
       previewPath.classList.add('edge-preview');
@@ -644,14 +644,14 @@ document.addEventListener('mousemove', e => {
     document.querySelectorAll(`.port-dot.${targetDir}`).forEach(dot=>{
       if (dot.dataset.node===connecting.nodeId) return;
       const r=dot.getBoundingClientRect();
-      const dist=Math.hypot(mx-(r.left+r.width/2-cr.left), my-(r.top+r.height/2-cr.top));
+      const dist=Math.hypot(mx-(r.left+r.width/2-cr.left)/canvasScale, my-(r.top+r.height/2-cr.top)/canvasScale);
       if (dist<40 && dist<snapDist){snapDist=dist;snapDot=dot;}
     });
     document.querySelectorAll('.port-dot.snap-target').forEach(d=>d.classList.remove('snap-target'));
     if (snapDot) {
       snapDot.classList.add('snap-target');
       const r=snapDot.getBoundingClientRect();
-      previewPath.setAttribute('d',bezier(src.x,src.y,r.left+r.width/2-cr.left,r.top+r.height/2-cr.top));
+      previewPath.setAttribute('d',bezier(src.x,src.y,(r.left+r.width/2-cr.left)/canvasScale,(r.top+r.height/2-cr.top)/canvasScale));
     } else {
       previewPath.setAttribute('d',bezier(src.x,src.y,mx,my));
     }
@@ -663,7 +663,7 @@ document.addEventListener('mouseup', e=>{
   if (connecting) {
     document.querySelectorAll('.port-dot.snap-target').forEach(d=>d.classList.remove('snap-target'));
     const cr=canvasEl.getBoundingClientRect();
-    const mx=e.clientX-cr.left, my=e.clientY-cr.top;
+    const mx=(e.clientX-cr.left)/canvasScale, my=(e.clientY-cr.top)/canvasScale;
     const targetDir=connecting.dir==='out'?'in':'out';
     let resolved=null;
     if (e.target?.classList?.contains('port-dot') && e.target.dataset.dir===targetDir && e.target.dataset.node!==connecting.nodeId)
@@ -673,7 +673,7 @@ document.addEventListener('mouseup', e=>{
       document.querySelectorAll(`.port-dot.${targetDir}`).forEach(dot=>{
         if (dot.dataset.node===connecting.nodeId) return;
         const r=dot.getBoundingClientRect();
-        const dist=Math.hypot(mx-(r.left+r.width/2-cr.left),my-(r.top+r.height/2-cr.top));
+        const dist=Math.hypot(mx-(r.left+r.width/2-cr.left)/canvasScale,my-(r.top+r.height/2-cr.top)/canvasScale);
         if (dist<40 && dist<bestDist){bestDist=dist;resolved=dot;}
       });
     }
@@ -714,10 +714,10 @@ function getPortPos(nodeId,portName,dir){
   for (const p of el.querySelectorAll('.port-dot'))
     if (p.dataset.port===portName&&p.dataset.dir===dir){
       const r=p.getBoundingClientRect();
-      return{x:r.left+r.width/2-cr.left,y:r.top+r.height/2-cr.top};
+      return{x:(r.left+r.width/2-cr.left)/canvasScale,y:(r.top+r.height/2-cr.top)/canvasScale};
     }
   const r=el.getBoundingClientRect();
-  return{x:r.left-cr.left,y:r.top+r.height/2-cr.top};
+  return{x:(r.left-cr.left)/canvasScale,y:(r.top+r.height/2-cr.top)/canvasScale};
 }
 function bezier(x1,y1,x2,y2){
   const dx=Math.max(Math.abs(x2-x1)*0.5,40);
@@ -735,7 +735,7 @@ function renderEdges(){
     function grabEdge(e){
       e.preventDefault(); e.stopPropagation();
       const cr=canvasEl.getBoundingClientRect();
-      const mx=e.clientX-cr.left, my=e.clientY-cr.top;
+      const mx=(e.clientX-cr.left)/canvasScale, my=(e.clientY-cr.top)/canvasScale;
       const dSrc=Math.hypot(mx-src.x,my-src.y);
       const dDst=Math.hypot(mx-dst.x,my-dst.y);
       // snapshot before deleteEdge mutates edges array
@@ -766,7 +766,7 @@ canvasEl.addEventListener('drop',e=>{
   e.preventDefault();
   const type=e.dataTransfer.getData('type'); if(!type) return;
   const cr=canvasEl.getBoundingClientRect();
-  createNode(type,e.clientX-cr.left-85,e.clientY-cr.top-30);
+  createNode(type,(e.clientX-cr.left)/canvasScale-85,(e.clientY-cr.top)/canvasScale-30);
 });
 
 // ─── Audio helpers ───────────────────────────────────────────────────
@@ -1163,7 +1163,7 @@ function autoArrange() {
   });
 
   const colKeys = Object.keys(cols).sort((a,b) => a - b);
-  const PAD = 24, MIN_GAP_X = 12, MIN_GAP_Y = 10;
+  const PAD = 24, MIN_GAP_X = 12, MAX_GAP_X = 48, MIN_GAP_Y = 10, MAX_GAP_Y = 28;
   const canvasW = canvasEl.clientWidth  || 900;
   const canvasH = canvasEl.clientHeight || 600;
   const availW  = canvasW - PAD * 2;
@@ -1181,30 +1181,27 @@ function autoArrange() {
   const colMaxW = {};
   colKeys.forEach(col => colMaxW[col] = Math.max(...cols[col].map(id => nW[id])));
 
-  // Spread remaining horizontal space evenly as column gaps
+  // Column gap: fit first, then cap — don't blow out spacing when few columns
   const totalNodeW = colKeys.reduce((s,c) => s + colMaxW[c], 0);
   const numColGaps = colKeys.length - 1;
-  const colGap = numColGaps > 0
-    ? Math.max(MIN_GAP_X, (availW - totalNodeW) / numColGaps)
-    : 0;
+  // If content is wider than viewport, let gap shrink to 0 (nodes touch but stay visible)
+  const naturalColGap = numColGaps > 0 ? (availW - totalNodeW) / numColGaps : 0;
+  const colGap = Math.min(MAX_GAP_X, Math.max(0, naturalColGap));
 
-  // Compute x positions
+  // Compute x positions — pack from top-left
   const colX = {};
   let curX = PAD;
   colKeys.forEach(col => { colX[col] = curX; curX += colMaxW[col] + colGap; });
 
-  // For each column, spread remaining vertical space evenly as row gaps
+  // Per-column: pack rows from top with capped gap
   colKeys.forEach(col => {
     const colNodes = cols[col];
     const heights  = colNodes.map(id => nH[id]);
     const totalNodeH = heights.reduce((a,b) => a+b, 0);
     const numRowGaps = colNodes.length - 1;
-    const rowGap = numRowGaps > 0
-      ? Math.max(MIN_GAP_Y, (availH - totalNodeH) / numRowGaps)
-      : 0;
-    // Center vertically when there's slack
-    const usedH = totalNodeH + numRowGaps * rowGap;
-    let y = PAD + Math.max(0, (availH - usedH) / 2);
+    const naturalRowGap = numRowGaps > 0 ? (availH - totalNodeH) / numRowGaps : 0;
+    const rowGap = Math.min(MAX_GAP_Y, Math.max(MIN_GAP_Y, naturalRowGap));
+    let y = PAD;
 
     colNodes.forEach((id, ri) => {
       const el = document.getElementById(id);
@@ -1217,7 +1214,20 @@ function autoArrange() {
     });
   });
 
+  // Scale canvas down if content doesn't fit
+  const maxX = Math.max(...ids.map(id => nodes[id].x + nW[id])) + PAD;
+  const maxY = Math.max(...ids.map(id => nodes[id].y + nH[id])) + PAD;
+  canvasScale = Math.min(1, canvasW / maxX, canvasH / maxY);
+  canvasEl.style.transformOrigin = '0 0';
+  canvasEl.style.transform = canvasScale < 0.999 ? `scale(${canvasScale.toFixed(4)})` : '';
+
   renderEdges();
+}
+
+function resetCanvasScale() {
+  if (canvasScale >= 0.999) return;
+  canvasScale = 1.0;
+  canvasEl.style.transform = '';
 }
 
 // ─── User Presets (localStorage) ─────────────────────────────────────
@@ -1227,10 +1237,8 @@ let activeUserPreset = null;
 function setActivePreset(name) {
   activeUserPreset = name || null;
   const isUser = !!activeUserPreset;
-  const save   = document.getElementById('btn-save');
-  const del    = document.getElementById('btn-delete');
-  if (save)  { save.disabled  = !isUser; save.style.opacity  = isUser ? '1' : '0.4'; }
-  if (del)   { del.disabled   = !isUser; del.style.opacity   = isUser ? '1' : '0.4'; }
+  const del = document.getElementById('btn-delete');
+  if (del) { del.disabled = !isUser; del.style.opacity = isUser ? '1' : '0.4'; }
 }
 
 function serializeGraph() {
@@ -1249,22 +1257,16 @@ function persistPreset(key) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
 }
 
-function saveCurrentPreset() {
-  if (!activeUserPreset) return savePresetAs();
-  persistPreset(activeUserPreset);
-  document.getElementById('status-msg').textContent = `✓ saved "${activeUserPreset}"`;
-  setTimeout(() => document.getElementById('status-msg').textContent = '', 2000);
-}
-
-function savePresetAs() {
-  const name = prompt('Name this preset:', activeUserPreset || '');
+function savePreset() {
+  const name = prompt('Save preset:', activeUserPreset || '');
   if (!name || !name.trim()) return;
   const key = name.trim();
-
+  const isOverwrite = key === activeUserPreset;
   persistPreset(key);
   addUserPresetOption(key);
   setActivePreset(key);
-  document.getElementById('status-msg').textContent = `✓ saved "${key}"`;
+  const msg = isOverwrite ? `✓ updated "${key}"` : `✓ saved "${key}"`;
+  document.getElementById('status-msg').textContent = msg;
   setTimeout(() => document.getElementById('status-msg').textContent = '', 2000);
 }
 
@@ -1323,6 +1325,7 @@ function clearAll(){
   Object.keys(nodes).forEach(id=>document.getElementById(id)?.remove());
   nodes={}; edges=[]; nodeIdCounter=0;
   setActivePreset(null);
+  resetCanvasScale();
   renderEdges(); updateStats();
 }
 
