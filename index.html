@@ -57,9 +57,7 @@
   }
   #canvas-area::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    background-image:
-      linear-gradient(rgba(48,54,61,0.3) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(48,54,61,0.3) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(80,90,100,0.55) 1px, transparent 1px);
     background-size: 24px 24px; pointer-events: none;
   }
   #svg-layer {
@@ -181,6 +179,13 @@
     font-size: 8px; color: #58d68d; font-weight: 600;
     min-height: 10px; margin-top: 2px;
   }
+@keyframes node-land {
+  0%   { transform: scale(1, 1);    box-shadow: none; }
+  12%  { transform: scale(1.015, 0.97); } /* brief compress on impact */
+  35%  { transform: scale(0.99, 1.01); } /* tiny rebound */
+  100% { transform: scale(1, 1); }
+}
+.node-land { animation: node-land 0.28s ease-out forwards; }
 </style>
 </head>
 <body>
@@ -657,6 +662,8 @@ let audioCtx=null, audioNodes={}, masterGain=null;
 let rafId=null;
 let seqState={};
 let canvasScale=1.0; // { [nodeId]: { step, intervalId } }
+const GRID=24;
+function snap(v){return Math.round(v/GRID)*GRID;}
 let scopeHistory={}; // { [nodeId]: Uint8Array[] } — ring buffer for trippy echo
 let activeKbNode = null; // id of focused keyboard node
 
@@ -667,6 +674,7 @@ const svgLayer = document.getElementById('svg-layer');
 function createNode(type, x, y, overrideParams={}) {
   const def = NODE_DEFS[type];
   if (!def) return;
+  x=snap(x); y=snap(y);
   const id = 'n'+(++nodeIdCounter);
   // Deep-copy params so array values (e.g. sequencer notes/active) aren't shared
   const params = {};
@@ -833,17 +841,9 @@ document.addEventListener('mousemove', e => {
     const cr = canvasEl.getBoundingClientRect();
     const x = Math.max(0, (e.clientX - cr.left - dragOffset.x) / canvasScale);
     const y = Math.max(0, (e.clientY - cr.top  - dragOffset.y) / canvasScale);
-    const dy = y - nodes[dragging].y; // movement delta
     const el = document.getElementById(dragging);
     el.style.left = x+'px'; el.style.top = y+'px';
     nodes[dragging].x = x; nodes[dragging].y = y;
-    // Impulse connected wires — they swing against movement direction
-    edges.forEach(edge=>{
-      if(edge.srcNode===dragging||edge.dstNode===dragging){
-        const sp=getEdgeSpring(edge);
-        sp.vy -= dy * 0.35;
-      }
-    });
     renderEdges();
   }
   if (connecting) {
@@ -875,7 +875,43 @@ document.addEventListener('mousemove', e => {
 });
 
 document.addEventListener('mouseup', e=>{
-  if (dragging) { dragging=null; }
+  if (dragging) {
+    // Drop bounce: connected wires spring, then ripple to one-hop neighbors
+    const dropped=dragging;
+    dragging=null;
+    // Snap to grid on release
+    const sx=snap(nodes[dropped].x), sy=snap(nodes[dropped].y);
+    nodes[dropped].x=sx; nodes[dropped].y=sy;
+    const snapEl=document.getElementById(dropped);
+    if(snapEl){snapEl.style.left=sx+'px'; snapEl.style.top=sy+'px';}
+    renderEdges();
+    // Node land animation
+    const landEl=document.getElementById(dropped);
+    if(landEl){
+      landEl.classList.remove('node-land');
+      void landEl.offsetWidth; // force reflow to restart animation
+      landEl.classList.add('node-land');
+      landEl.addEventListener('animationend',()=>landEl.classList.remove('node-land'),{once:true});
+    }
+    const neighborNodes=new Set();
+    edges.forEach(edge=>{
+      if(edge.srcNode===dropped||edge.dstNode===dropped){
+        const sp=getEdgeSpring(edge);
+        sp.y=-32; sp.vy=0; // primary bounce
+        // collect the other end of each wire
+        neighborNodes.add(edge.srcNode===dropped?edge.dstNode:edge.srcNode);
+      }
+    });
+    // Ripple: wires connected to neighbor nodes (but not the dropped node) get a gentler bounce
+    edges.forEach(edge=>{
+      if(edge.srcNode===dropped||edge.dstNode===dropped) return; // already handled
+      const touchesNeighbor=neighborNodes.has(edge.srcNode)||neighborNodes.has(edge.dstNode);
+      if(touchesNeighbor){
+        const sp=getEdgeSpring(edge);
+        sp.y=-5; sp.vy=0;
+      }
+    });
+  }
   if (connecting) {
     document.querySelectorAll('.port-dot.snap-target').forEach(d=>d.classList.remove('snap-target'));
     const cr=canvasEl.getBoundingClientRect();
@@ -914,7 +950,7 @@ function addEdge(sN,sP,dN,dP) {
   const edge={id:'e'+edges.length,srcNode:sN,srcPort:sP,dstNode:dN,dstPort:dP};
   edges.push(edge);
   // Spring: start pulled upward, bounces into place
-  edgeSprings[edgeSpringKey(edge)]={y:-30,vy:0};
+  edgeSprings[edgeSpringKey(edge)]={y:-45,vy:0};
   renderEdges(); updateStats();
 }
 function deleteEdge(idx){edges.splice(idx,1);renderEdges();updateStats();}
@@ -993,8 +1029,8 @@ function animateWires(){
     if(!src||!dst) return;
     // Spring physics: settle toward y=0 (natural sag position)
     const sp=getEdgeSpring(edge);
-    sp.vy += -0.14 * sp.y; // spring force
-    sp.vy *= 0.82;          // damping
+    sp.vy += -0.12 * sp.y; // spring force
+    sp.vy *= 0.86;          // damping — looser = more oscillations
     sp.y  += sp.vy;
     if(Math.abs(sp.y)<0.1&&Math.abs(sp.vy)<0.05) sp.y=sp.vy=0; // settle
     const d=bezier(src.x,src.y,dst.x,dst.y,sp.y);
@@ -1012,7 +1048,12 @@ canvasEl.addEventListener('drop',e=>{
   e.preventDefault();
   const type=e.dataTransfer.getData('type'); if(!type) return;
   const cr=canvasEl.getBoundingClientRect();
-  createNode(type,(e.clientX-cr.left)/canvasScale-85,(e.clientY-cr.top)/canvasScale-30);
+  const id=createNode(type,snap((e.clientX-cr.left)/canvasScale-85),snap((e.clientY-cr.top)/canvasScale-30));
+  // Land animation on palette drop
+  requestAnimationFrame(()=>{
+    const el=document.getElementById(id);
+    if(el){ el.classList.add('node-land'); el.addEventListener('animationend',()=>el.classList.remove('node-land'),{once:true}); }
+  });
 });
 
 // ─── Audio helpers ───────────────────────────────────────────────────
