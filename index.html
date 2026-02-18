@@ -54,12 +54,12 @@
   .pi-sink   { border-left-color: #c97bff; }
   #canvas-area {
     position: fixed; top: 44px; left: 180px; right: 0; bottom: 0; overflow: hidden;
-  }
-  #canvas-area::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    transform-origin: 0 0;
     background-image: radial-gradient(circle, rgba(80,90,100,0.55) 1px, transparent 1px);
-    background-size: 24px 24px; pointer-events: none;
+    background-size: 24px 24px;
   }
+  #canvas-area.panning { cursor: grab; }
+  #canvas-area.panning:active { cursor: grabbing; }
   #svg-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
   }
@@ -260,6 +260,9 @@
       <span style="color:#c97bff;font-family:monospace">W E T Y U</span><span>black keys (C# D# F# G# A#)</span>
       <span style="color:#c97bff;font-family:monospace">- / =</span><span>octave down / up</span>
       <span style="color:#c97bff;font-family:monospace">Delete</span><span>remove selected node</span>
+      <span style="color:#c97bff;font-family:monospace">Ctrl + Scroll</span><span>zoom in/out (around cursor)</span>
+      <span style="color:#c97bff;font-family:monospace">Space + Drag</span><span>pan canvas</span>
+      <span style="color:#c97bff;font-family:monospace">Home / dbl-click</span><span>reset view</span>
     </div>
 
     <div style="color:#58d68d;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">Tips</div>
@@ -362,6 +365,7 @@
 <div id="info-bar">
   <span>nodes: <span id="stat-nodes">0</span></span>
   <span>edges: <span id="stat-edges">0</span></span>
+  <span>zoom: <span id="stat-zoom">100%</span></span>
   <span id="status-msg"></span>
 </div>
 
@@ -666,7 +670,10 @@ function getEdgeSpring(edge){
 let audioCtx=null, audioNodes={}, masterGain=null;
 let rafId=null;
 let seqState={};
-let canvasScale=1.0; // { [nodeId]: { step, intervalId } }
+let canvasScale=1.0;
+let canvasOffset={x:0,y:0}; // pan offset in canvas space
+let isPanning=false, panStart={x:0,y:0}, panStartOffset={x:0,y:0};
+const ZOOM_MIN=0.15, ZOOM_MAX=4.0;
 const GRID=24;
 function snap(v){return Math.round(v/GRID)*GRID;}
 let scopeHistory={}; // { [nodeId]: Uint8Array[] } — ring buffer for trippy echo
@@ -842,18 +849,18 @@ function onHeaderMousedown(e) {
 }
 
 document.addEventListener('mousemove', e => {
-  if (dragging) {
+  if (dragging && !isPanning) {
     const cr = canvasEl.getBoundingClientRect();
-    const x = Math.max(0, (e.clientX - cr.left - dragOffset.x) / canvasScale);
-    const y = Math.max(0, (e.clientY - cr.top  - dragOffset.y) / canvasScale);
+    const x = Math.max(0, (e.clientX - cr.left - dragOffset.x) / canvasScale - canvasOffset.x);
+    const y = Math.max(0, (e.clientY - cr.top  - dragOffset.y) / canvasScale - canvasOffset.y);
     const el = document.getElementById(dragging);
     el.style.left = x+'px'; el.style.top = y+'px';
     nodes[dragging].x = x; nodes[dragging].y = y;
     renderEdges();
   }
-  if (connecting) {
+  if (connecting && !isPanning) {
     const cr = canvasEl.getBoundingClientRect();
-    const mx = (e.clientX-cr.left)/canvasScale, my = (e.clientY-cr.top)/canvasScale;
+    const mx = (e.clientX-cr.left)/canvasScale - canvasOffset.x, my = (e.clientY-cr.top)/canvasScale - canvasOffset.y;
     if (!previewPath) {
       previewPath = document.createElementNS('http://www.w3.org/2000/svg','path');
       previewPath.classList.add('edge-preview');
@@ -865,14 +872,18 @@ document.addEventListener('mousemove', e => {
     document.querySelectorAll(`.port-dot.${targetDir}`).forEach(dot=>{
       if (dot.dataset.node===connecting.nodeId) return;
       const r=dot.getBoundingClientRect();
-      const dist=Math.hypot(mx-(r.left+r.width/2-cr.left)/canvasScale, my-(r.top+r.height/2-cr.top)/canvasScale);
+      const dotX = (r.left+r.width/2-cr.left)/canvasScale - canvasOffset.x;
+      const dotY = (r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y;
+      const dist=Math.hypot(mx-dotX, my-dotY);
       if (dist<40 && dist<snapDist){snapDist=dist;snapDot=dot;}
     });
     document.querySelectorAll('.port-dot.snap-target').forEach(d=>d.classList.remove('snap-target'));
     if (snapDot) {
       snapDot.classList.add('snap-target');
       const r=snapDot.getBoundingClientRect();
-      previewPath.setAttribute('d',bezier(src.x,src.y,(r.left+r.width/2-cr.left)/canvasScale,(r.top+r.height/2-cr.top)/canvasScale));
+      const snapX = (r.left+r.width/2-cr.left)/canvasScale - canvasOffset.x;
+      const snapY = (r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y;
+      previewPath.setAttribute('d',bezier(src.x,src.y,snapX,snapY));
     } else {
       previewPath.setAttribute('d',bezier(src.x,src.y,mx,my));
     }
@@ -917,10 +928,10 @@ document.addEventListener('mouseup', e=>{
       }
     });
   }
-  if (connecting) {
+  if (connecting && !isPanning) {
     document.querySelectorAll('.port-dot.snap-target').forEach(d=>d.classList.remove('snap-target'));
     const cr=canvasEl.getBoundingClientRect();
-    const mx=(e.clientX-cr.left)/canvasScale, my=(e.clientY-cr.top)/canvasScale;
+    const mx=(e.clientX-cr.left)/canvasScale - canvasOffset.x, my=(e.clientY-cr.top)/canvasScale - canvasOffset.y;
     const targetDir=connecting.dir==='out'?'in':'out';
     let resolved=null;
     if (e.target?.classList?.contains('port-dot') && e.target.dataset.dir===targetDir && e.target.dataset.node!==connecting.nodeId)
@@ -930,7 +941,9 @@ document.addEventListener('mouseup', e=>{
       document.querySelectorAll(`.port-dot.${targetDir}`).forEach(dot=>{
         if (dot.dataset.node===connecting.nodeId) return;
         const r=dot.getBoundingClientRect();
-        const dist=Math.hypot(mx-(r.left+r.width/2-cr.left)/canvasScale,my-(r.top+r.height/2-cr.top)/canvasScale);
+        const dotX = (r.left+r.width/2-cr.left)/canvasScale - canvasOffset.x;
+        const dotY = (r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y;
+        const dist=Math.hypot(mx-dotX,my-dotY);
         if (dist<40 && dist<bestDist){bestDist=dist;resolved=dot;}
       });
     }
@@ -975,10 +988,10 @@ function getPortPos(nodeId,portName,dir){
   for (const p of el.querySelectorAll('.port-dot'))
     if (p.dataset.port===portName&&p.dataset.dir===dir){
       const r=p.getBoundingClientRect();
-      return{x:(r.left+r.width/2-cr.left)/canvasScale,y:(r.top+r.height/2-cr.top)/canvasScale};
+      return{x:(r.left+r.width/2-cr.left)/canvasScale - canvasOffset.x, y:(r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y};
     }
   const r=el.getBoundingClientRect();
-  return{x:(r.left-cr.left)/canvasScale,y:(r.top+r.height/2-cr.top)/canvasScale};
+  return{x:(r.left-cr.left)/canvasScale - canvasOffset.x, y:(r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y};
 }
 function bezier(x1,y1,x2,y2,extraSag=0){
   const dx=Math.max(Math.abs(x2-x1)*0.5,40);
@@ -999,7 +1012,7 @@ function renderEdges(){
     function grabEdge(e){
       e.preventDefault(); e.stopPropagation();
       const cr=canvasEl.getBoundingClientRect();
-      const mx=(e.clientX-cr.left)/canvasScale, my=(e.clientY-cr.top)/canvasScale;
+      const mx=(e.clientX-cr.left)/canvasScale - canvasOffset.x, my=(e.clientY-cr.top)/canvasScale - canvasOffset.y;
       const dSrc=Math.hypot(mx-src.x,my-src.y);
       const dDst=Math.hypot(mx-dst.x,my-dst.y);
       const fixedNode = dDst<=dSrc ? edge.srcNode : edge.dstNode;
@@ -1053,7 +1066,7 @@ canvasEl.addEventListener('drop',e=>{
   e.preventDefault();
   const type=e.dataTransfer.getData('type'); if(!type) return;
   const cr=canvasEl.getBoundingClientRect();
-  const id=createNode(type,snap((e.clientX-cr.left)/canvasScale-85),snap((e.clientY-cr.top)/canvasScale-30));
+  const id=createNode(type,snap((e.clientX-cr.left)/canvasScale - canvasOffset.x - 85),snap((e.clientY-cr.top)/canvasScale - canvasOffset.y - 30));
   // Land animation on palette drop
   requestAnimationFrame(()=>{
     const el=document.getElementById(id);
@@ -1972,16 +1985,27 @@ function autoArrange() {
   const maxX = Math.max(...ids.map(id => nodes[id].x + nW[id])) + PAD;
   const maxY = Math.max(...ids.map(id => nodes[id].y + nH[id])) + PAD;
   canvasScale = Math.min(1, canvasW / maxX, canvasH / maxY);
-  canvasEl.style.transformOrigin = '0 0';
-  canvasEl.style.transform = canvasScale < 0.999 ? `scale(${canvasScale.toFixed(4)})` : '';
+  canvasOffset = {x:0, y:0};
+  applyCanvasTransform();
 
   renderEdges();
 }
 
+function applyCanvasTransform() {
+  // Apply combined translate+scale transform
+  const tx = canvasOffset.x * canvasScale;
+  const ty = canvasOffset.y * canvasScale;
+  canvasEl.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${canvasScale.toFixed(4)})`;
+  
+  // Update zoom display
+  const zoomEl = document.getElementById('stat-zoom');
+  if (zoomEl) zoomEl.textContent = Math.round(canvasScale * 100) + '%';
+}
+
 function resetCanvasScale() {
-  if (canvasScale >= 0.999) return;
   canvasScale = 1.0;
-  canvasEl.style.transform = '';
+  canvasOffset = {x:0, y:0};
+  applyCanvasTransform();
 }
 
 // ─── User Presets (localStorage) ─────────────────────────────────────
@@ -2257,6 +2281,95 @@ function loadFromHash() {
     console.warn('Failed to load patch from URL:', e);
   }
 }
+
+// ─── Canvas zoom & pan ───────────────────────────────────────────────
+let spaceHeld = false;
+
+// Zoom with Ctrl+wheel (or Cmd+wheel on Mac) — zoom around cursor
+canvasEl.addEventListener('wheel', e => {
+  // Only zoom if Ctrl/Cmd held, otherwise let default scroll happen
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const cr = canvasEl.getBoundingClientRect();
+  // Mouse position in screen space relative to canvas
+  const mx = e.clientX - cr.left;
+  const my = e.clientY - cr.top;
+  // Mouse position in canvas space (before zoom)
+  const cx = (mx / canvasScale) - canvasOffset.x;
+  const cy = (my / canvasScale) - canvasOffset.y;
+  
+  // Calculate new scale
+  const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, canvasScale * zoomFactor));
+  
+  // Adjust offset so the point under cursor stays fixed
+  canvasOffset.x = (mx / newScale) - cx;
+  canvasOffset.y = (my / newScale) - cy;
+  canvasScale = newScale;
+  
+  applyCanvasTransform();
+  renderEdges();
+}, { passive: false });
+
+// Pan with middle mouse button OR space+drag
+canvasEl.addEventListener('mousedown', e => {
+  // Middle button (1) or left button with space held
+  if (e.button === 1 || (e.button === 0 && spaceHeld)) {
+    e.preventDefault();
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY };
+    panStartOffset = { x: canvasOffset.x, y: canvasOffset.y };
+    canvasEl.classList.add('panning');
+  }
+});
+
+document.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  const dx = (e.clientX - panStart.x) / canvasScale;
+  const dy = (e.clientY - panStart.y) / canvasScale;
+  canvasOffset.x = panStartOffset.x + dx;
+  canvasOffset.y = panStartOffset.y + dy;
+  applyCanvasTransform();
+  renderEdges();
+});
+
+document.addEventListener('mouseup', e => {
+  if (isPanning && (e.button === 1 || e.button === 0)) {
+    isPanning = false;
+    canvasEl.classList.remove('panning');
+  }
+});
+
+// Space key to enable panning mode
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !e.repeat && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
+    spaceHeld = true;
+    canvasEl.classList.add('panning');
+    e.preventDefault();
+  }
+  // Home key to reset view
+  if (e.code === 'Home') {
+    resetCanvasScale();
+    renderEdges();
+  }
+});
+
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    spaceHeld = false;
+    if (!isPanning) canvasEl.classList.remove('panning');
+  }
+});
+
+// Double-click on empty canvas to reset view
+canvasEl.addEventListener('dblclick', e => {
+  if (e.target === canvasEl || e.target === svgLayer) {
+    resetCanvasScale();
+    renderEdges();
+  }
+});
 
 // ─── QWERTY keyboard → keyboard node ────────────────────────────────
 const QWERTY_MAP = {
