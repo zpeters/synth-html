@@ -435,22 +435,24 @@ const NODE_DEFS = {
     label:'Envelope', color:'#d6a058', kind:'effect', ins:['signal','gate'], outs:['signal'],
     params:{ attack:0.01, decay:0.15, sustain:0.7, release:0.4 },
     renderBody(id,p){ return `
+      <canvas id="${id}-env-cv" width="160" height="54"
+        style="display:block;width:160px;height:54px;background:#0d1117;border-radius:4px;margin:2px 0 8px;border:1px solid #21262d"></canvas>
       <div class="param-row"><span class="param-label">Attack</span>
         <input class="param-input" type="number" min="0.001" max="4" step="0.01" value="${p.attack}"
-          onchange="updateParam('${id}','attack',+this.value)">
+          onchange="updateParam('${id}','attack',+this.value);drawEnvelope('${id}')">
       </div>
       <div class="param-row"><span class="param-label">Decay</span>
         <input class="param-input" type="number" min="0.001" max="4" step="0.01" value="${p.decay}"
-          onchange="updateParam('${id}','decay',+this.value)">
+          onchange="updateParam('${id}','decay',+this.value);drawEnvelope('${id}')">
       </div>
       <div class="param-row"><span class="param-label">Sustain</span>
         <input class="param-input" type="range" min="0" max="1" step="0.01" value="${p.sustain}"
-          style="width:76px" oninput="updateParam('${id}','sustain',+this.value);document.getElementById('${id}-susval').textContent=(+this.value*100|0)+'%'">
+          style="width:76px" oninput="updateParam('${id}','sustain',+this.value);document.getElementById('${id}-susval').textContent=(+this.value*100|0)+'%';drawEnvelope('${id}')">
         <span id="${id}-susval" style="color:#6e7681;width:30px;text-align:right">${(p.sustain*100|0)}%</span>
       </div>
       <div class="param-row"><span class="param-label">Release</span>
         <input class="param-input" type="number" min="0.001" max="8" step="0.01" value="${p.release}"
-          onchange="updateParam('${id}','release',+this.value)">
+          onchange="updateParam('${id}','release',+this.value);drawEnvelope('${id}')">
       </div>`; }
   },
   gain: {
@@ -761,6 +763,7 @@ function createNode(type, x, y, overrideParams={}) {
   canvasEl.appendChild(el);
   el.querySelector('.node-header').addEventListener('mousedown', onHeaderMousedown);
   el.querySelectorAll('.port-dot').forEach(d => d.addEventListener('mousedown', onPortMousedown));
+  if (type === 'envelope') requestAnimationFrame(() => drawEnvelope(id));
   updateStats();
   return id;
 }
@@ -865,6 +868,89 @@ function kbRelease(nodeId, semi) {
 }
 
 // ─── Envelope ADSR helpers ──────────────────────────────────────────
+function drawEnvelope(id) {
+  const cv = document.getElementById(id + '-env-cv');
+  if (!cv) return;
+  const p = nodes[id]?.params;
+  if (!p) return;
+  const W = cv.width, H = cv.height;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const a = Math.max(0.001, +p.attack);
+  const d = Math.max(0.001, +p.decay);
+  const s = Math.min(1, Math.max(0, +p.sustain));
+  const r = Math.max(0.001, +p.release);
+
+  // Allocate horizontal space proportionally; sustain gets 25% fixed
+  const susHold = (a + d + r) * 0.4;
+  const total = a + d + susHold + r;
+  const px = t => 4 + (t / total) * (W - 8);
+  const py = v => 4 + (1 - v) * (H - 12);  // leave 8px bottom for labels
+
+  const x0 = px(0),         y0 = py(0);
+  const x1 = px(a),         y1 = py(1);          // attack peak
+  const x2 = px(a + d),     y2 = py(s);          // decay → sustain
+  const x3 = px(a + d + susHold), y3 = py(s);    // sustain end
+  const x4 = px(total),     y4 = py(0);          // release end
+
+  // Filled area
+  const grad = ctx.createLinearGradient(0, 4, 0, H - 8);
+  grad.addColorStop(0,   'rgba(214,160,88,0.35)');
+  grad.addColorStop(1,   'rgba(214,160,88,0.03)');
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.lineTo(x3, y3);
+  ctx.lineTo(x4, y4);
+  ctx.lineTo(x4, py(0));
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Envelope line
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.lineTo(x3, y3);
+  ctx.lineTo(x4, y4);
+  ctx.strokeStyle = '#d6a058';
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Dots at key points
+  [[x1,y1],[x2,y2],[x3,y3]].forEach(([cx2,cy2]) => {
+    ctx.beginPath();
+    ctx.arc(cx2, cy2, 2.5, 0, Math.PI*2);
+    ctx.fillStyle = '#d6a058';
+    ctx.fill();
+  });
+
+  // Section labels
+  ctx.font = '8px IBM Plex Mono, monospace';
+  ctx.fillStyle = '#484f58';
+  const lY = H - 1;
+  ctx.fillText('A', (x0 + x1) / 2 - 3, lY);
+  ctx.fillText('D', (x1 + x2) / 2 - 3, lY);
+  ctx.fillText('S', (x2 + x3) / 2 - 3, lY);
+  ctx.fillText('R', (x3 + x4) / 2 - 3, lY);
+
+  // Sustain level line (dashed)
+  if (s > 0.01 && s < 0.99) {
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(W - 2, y2);
+    ctx.strokeStyle = 'rgba(214,160,88,0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
 function envAttack(nodeId) {
   if (!audioCtx || !audioNodes[nodeId]) return;
   const g = audioNodes[nodeId].main.gain;
