@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>synth.html</title>
+<title>synth.html v0.7.0</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -203,6 +203,7 @@
 
 <div id="toolbar">
   <span class="logo">◈ synth.html</span>
+  <span style="font-size:9px;color:#484f58;letter-spacing:1px;margin-left:-10px">v0.7.0</span>
   <div class="tb-sep"></div>
   <button class="tb-btn play" id="play-btn" onclick="startAudio()">▶ Play</button>
   <button class="tb-btn stop" id="stop-btn" onclick="stopAudio()">■ Stop</button>
@@ -684,6 +685,9 @@ const NODE_DEFS = {
     }
   },
 };
+
+// ─── Version ─────────────────────────────────────────────────────────
+const VERSION = '0.7.0';
 
 // ─── State ───────────────────────────────────────────────────────────
 let nodes={}, edges=[], nodeIdCounter=0;
@@ -1995,7 +1999,7 @@ function autoArrange() {
   const ids = Object.keys(nodes);
   if (!ids.length) return;
 
-  // Longest-path depth assignment
+  // ── Phase 1: Longest-path depth (column) assignment ──────────────────
   const depth = {};
   ids.forEach(id => depth[id] = 0);
   for (let pass = 0; pass < ids.length; pass++) {
@@ -2007,74 +2011,146 @@ function autoArrange() {
     });
   }
 
-  // Group by column depth
+  // Group by column
   const cols = {};
   ids.forEach(id => {
     const d = depth[id] || 0;
     if (!cols[d]) cols[d] = [];
     cols[d].push(id);
   });
+  const colKeys = Object.keys(cols).sort((a,b) => +a - +b);
 
-  const colKeys = Object.keys(cols).sort((a,b) => a - b);
-  const PAD = 24, MIN_GAP_X = 12, MAX_GAP_X = 48, MIN_GAP_Y = 10, MAX_GAP_Y = 28;
-  const canvasW = canvasEl.clientWidth  || 900;
-  const canvasH = canvasEl.clientHeight || 600;
-  const availW  = canvasW - PAD * 2;
-  const availH  = canvasH - PAD * 2;
-
-  // Measure each node's rendered size
+  // Measure nodes
   const nW = {}, nH = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
-    nW[id] = el ? el.offsetWidth  : 180;
+    nW[id] = el ? el.offsetWidth  : 190;
     nH[id] = el ? el.offsetHeight : 140;
   });
 
-  // Max width per column
+  // ── Phase 2: Seed initial positions ──────────────────────────────────
+  const COL_STRIDE = 260, ROW_STRIDE = 170, PAD = 40;
   const colMaxW = {};
   colKeys.forEach(col => colMaxW[col] = Math.max(...cols[col].map(id => nW[id])));
 
-  // Column gap: fit first, then cap — don't blow out spacing when few columns
-  const totalNodeW = colKeys.reduce((s,c) => s + colMaxW[c], 0);
-  const numColGaps = colKeys.length - 1;
-  // If content is wider than viewport, let gap shrink to 0 (nodes touch but stay visible)
-  const naturalColGap = numColGaps > 0 ? (availW - totalNodeW) / numColGaps : 0;
-  const colGap = Math.min(MAX_GAP_X, Math.max(0, naturalColGap));
-
-  // Compute x positions — pack from top-left
+  // Build column x positions
   const colX = {};
-  let curX = PAD;
-  colKeys.forEach(col => { colX[col] = curX; curX += colMaxW[col] + colGap; });
+  let cx = PAD;
+  colKeys.forEach(col => { colX[col] = cx; cx += colMaxW[col] + Math.max(60, COL_STRIDE - colMaxW[col]); });
 
-  // Per-column: pack rows from top with capped gap
+  const pos = {};
+  const vel = {};
   colKeys.forEach(col => {
-    const colNodes = cols[col];
-    const heights  = colNodes.map(id => nH[id]);
-    const totalNodeH = heights.reduce((a,b) => a+b, 0);
-    const numRowGaps = colNodes.length - 1;
-    const naturalRowGap = numRowGaps > 0 ? (availH - totalNodeH) / numRowGaps : 0;
-    const rowGap = Math.min(MAX_GAP_Y, Math.max(MIN_GAP_Y, naturalRowGap));
-    let y = PAD;
-
-    colNodes.forEach((id, ri) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.style.left = colX[col] + 'px';
-      el.style.top  = y + 'px';
-      nodes[id].x = colX[col];
-      nodes[id].y = y;
-      y += heights[ri] + rowGap;
+    const list = cols[col];
+    const totalH = list.reduce((s, id) => s + nH[id], 0) + (list.length - 1) * 20;
+    let y = PAD + Math.max(0, 300 - totalH / 2); // center-ish vertically
+    list.forEach(id => {
+      pos[id] = { x: colX[col], y };
+      vel[id] = { x: 0, y: 0 };
+      y += nH[id] + 20;
     });
   });
 
-  // Scale canvas down if content doesn't fit
-  const maxX = Math.max(...ids.map(id => nodes[id].x + nW[id])) + PAD;
-  const maxY = Math.max(...ids.map(id => nodes[id].y + nH[id])) + PAD;
-  canvasScale = Math.min(1, canvasW / maxX, canvasH / maxY);
-  canvasOffset = {x:0, y:0};
-  applyCanvasTransform();
+  // ── Phase 3: Force-directed physics (CPU-only, ~100 iters) ───────────
+  const REPULSION   = 15000;
+  const SPRING_K    = 0.04;
+  const SPRING_REST = 280;
+  const COL_ANCHOR  = 0.5;   // pull toward column x
+  const DAMPING     = 0.80;
+  const DT          = 0.9;
 
-  renderEdges();
+  for (let iter = 0; iter < 120; iter++) {
+    const force = {};
+    ids.forEach(id => force[id] = { x: 0, y: 0 });
+
+    // Node-node repulsion (Y-dominant: same-column nodes push vertically)
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = ids[i], b = ids[j];
+        const dx = pos[b].x - pos[a].x;
+        const dy = pos[b].y - pos[a].y;
+        // Use bounding-box repulsion: account for node sizes
+        const overlapX = Math.max(0, (nW[a] + nW[b]) / 2 + 20 - Math.abs(dx));
+        const overlapY = Math.max(0, (nH[a] + nH[b]) / 2 + 20 - Math.abs(dy));
+        const dist2 = Math.max(dx*dx + dy*dy, 100);
+        const dist  = Math.sqrt(dist2);
+        // Pure distance repulsion
+        const f = REPULSION / dist2;
+        const nx = dx / dist, ny = dy / dist;
+        force[a].x -= f * nx * 0.3;  // weaker X repulsion (columns handle x)
+        force[a].y -= f * ny;
+        force[b].x += f * nx * 0.3;
+        force[b].y += f * ny;
+        // Extra overlap push
+        if (overlapX > 0 && overlapY > 0) {
+          const push = 4;
+          force[a].y -= (dy < 0 ? -push : push);
+          force[b].y += (dy < 0 ? -push : push);
+        }
+      }
+    }
+
+    // Edge springs
+    edges.forEach(e => {
+      if (!pos[e.srcNode] || !pos[e.dstNode]) return;
+      const a = e.srcNode, b = e.dstNode;
+      const dx = pos[b].x - pos[a].x;
+      const dy = pos[b].y - pos[a].y;
+      const dist = Math.max(Math.sqrt(dx*dx + dy*dy), 1);
+      const f = SPRING_K * (dist - SPRING_REST);
+      const nx = dx/dist, ny = dy/dist;
+      // Springs only pull vertically (not x — columns handle that)
+      force[a].y += f * ny;
+      force[b].y -= f * ny;
+    });
+
+    // Column x anchor (keep nodes in their assigned column)
+    ids.forEach(id => {
+      const d = depth[id] || 0;
+      const targetX = colX[String(d)];
+      force[id].x += COL_ANCHOR * (targetX - pos[id].x);
+    });
+
+    // Integrate
+    ids.forEach(id => {
+      vel[id].x = (vel[id].x + force[id].x * DT * 0.01) * DAMPING;
+      vel[id].y = (vel[id].y + force[id].y * DT * 0.01) * DAMPING;
+      pos[id].x = Math.max(0, pos[id].x + vel[id].x);
+      pos[id].y = Math.max(0, pos[id].y + vel[id].y);
+    });
+  }
+
+  // ── Phase 4: Animate nodes to final positions ─────────────────────
+  const EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';  // spring bounce
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const snap24 = v => Math.round(v / 24) * 24; // align to dot grid
+    const fx = snap24(pos[id].x), fy = snap24(pos[id].y);
+    el.style.transition = `left 0.55s ${EASE}, top 0.55s ${EASE}`;
+    el.style.left = fx + 'px';
+    el.style.top  = fy + 'px';
+    nodes[id].x = fx;
+    nodes[id].y = fy;
+  });
+
+  // Remove transitions after animation
+  setTimeout(() => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.transition = '';
+    });
+    renderEdges();
+  }, 620);
+
+  // Fit viewport
+  const maxX = Math.max(...ids.map(id => pos[id].x + nW[id])) + PAD;
+  const maxY = Math.max(...ids.map(id => pos[id].y + nH[id])) + PAD;
+  const canvasW = canvasEl.clientWidth || 900;
+  const canvasH = canvasEl.clientHeight || 600;
+  canvasScale = Math.min(1, canvasW / maxX, canvasH / maxY);
+  canvasOffset = { x: 0, y: 0 };
+  applyCanvasTransform();
 }
 
 function applyCanvasTransform() {
