@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synth — Node Synthesizer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f1117; color: #e0e0e0;
+    font-family: 'IBM Plex Mono', 'Fira Code', monospace;
+    font-size: 12px; overflow: hidden; height: 100vh;
+  }
+  #toolbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 44px;
+    background: #161b22; border-bottom: 1px solid #30363d;
+    display: flex; align-items: center; padding: 0 16px; gap: 8px; z-index: 100;
+  }
+  .logo { font-size: 14px; font-weight: 700; color: #c97bff; letter-spacing: 1px; margin-right: 16px; }
+  .tb-btn {
+    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 4px 14px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 11px; transition: all 0.15s;
+  }
+  .tb-btn:hover { background: #30363d; }
+  .tb-btn.play { border-color: #58d68d; color: #58d68d; }
+  .tb-btn.play:hover { background: #58d68d22; }
+  .tb-btn.stop { border-color: #f85149; color: #f85149; display: none; }
+  .tb-btn.stop:hover { background: #f8514922; }
+  .tb-select {
+    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 11px;
+    cursor: pointer; outline: none;
+  }
+  .tb-sep { width: 1px; height: 24px; background: #30363d; margin: 0 4px; }
+  #node-palette {
+    position: fixed; top: 44px; left: 0; width: 180px; bottom: 0;
+    background: #161b22; border-right: 1px solid #30363d;
+    padding: 12px 8px; overflow-y: auto; z-index: 50;
+  }
+  .palette-section { margin-bottom: 16px; }
+  .palette-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: #484f58; margin-bottom: 8px; padding: 0 4px; }
+  .palette-item {
+    background: #21262d; border: 1px solid #30363d; border-left: 3px solid;
+    border-radius: 4px; padding: 8px 10px; margin-bottom: 4px;
+    cursor: grab; transition: all 0.15s; user-select: none;
+  }
+  .palette-item:hover { background: #2d333b; transform: translateX(2px); }
+  .palette-item .item-name { font-size: 11px; color: #c9d1d9; }
+  .palette-item .item-desc { font-size: 9px; color: #484f58; margin-top: 2px; }
+  .pi-source { border-left-color: #58d68d; }
+  .pi-effect { border-left-color: #5da0d0; }
+  .pi-mod    { border-left-color: #d6a058; }
+  .pi-sink   { border-left-color: #c97bff; }
+  #canvas-area {
+    position: fixed; top: 44px; left: 180px; right: 0; bottom: 0; overflow: hidden;
+  }
+  #canvas-area::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background-image:
+      linear-gradient(rgba(48,54,61,0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(48,54,61,0.3) 1px, transparent 1px);
+    background-size: 24px 24px; pointer-events: none;
+  }
+  #svg-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+  }
+  .edge-path { fill: none; stroke-width: 2; opacity: 0.6; transition: opacity 0.15s; pointer-events: visibleStroke; cursor: grab; }
+  .edge-path:hover { opacity: 1; }
+  .edge-hit { fill: none; stroke: transparent; stroke-width: 16; cursor: grab; pointer-events: stroke; }
+  .edge-preview { fill: none; stroke: #c97bff; stroke-width: 2; stroke-dasharray: 6,4; opacity: 0.4; pointer-events: none; }
+
+  /* Nodes */
+  .node {
+    position: absolute; background: #1c2128; border: 1px solid #30363d;
+    border-radius: 6px; min-width: 170px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    user-select: none; transition: box-shadow 0.2s;
+  }
+  .node.selected { border-color: #c97bff; box-shadow: 0 0 0 1px #c97bff55, 0 4px 20px rgba(201,123,255,0.15); }
+  .node.running  { box-shadow: 0 0 0 1px #58d68d33, 0 0 18px rgba(88,214,141,0.12); }
+  .node-header {
+    padding: 7px 10px; border-bottom: 1px solid #30363d; border-radius: 6px 6px 0 0;
+    cursor: grab; display: flex; align-items: center; gap: 7px; background: #21262d;
+  }
+  .node-header:active { cursor: grabbing; }
+  .node-color-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .node-title { font-size: 10px; font-weight: 600; color: #c9d1d9; flex: 1; letter-spacing: 0.5px; text-transform: uppercase; }
+  .delete-btn { background: none; border: none; color: #484f58; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; transition: color 0.15s; }
+  .delete-btn:hover { color: #f85149; }
+  .node-body { padding: 10px 12px 6px; }
+  .param-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px; }
+  .param-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+  .param-input {
+    background: #0f1117; border: 1px solid #30363d; border-radius: 3px;
+    color: #c9d1d9; font-family: inherit; font-size: 11px; padding: 2px 6px;
+    width: 90px; text-align: right; outline: none; transition: border-color 0.15s;
+  }
+  .param-input:focus { border-color: #c97bff; }
+  .param-select {
+    background: #0f1117; border: 1px solid #30363d; border-radius: 3px;
+    color: #c9d1d9; font-family: inherit; font-size: 10px; padding: 2px 4px; width: 90px; outline: none;
+  }
+
+  /* VU bar */
+  .vu-bar { height: 6px; border-radius: 3px; background: #21262d; overflow: hidden; margin-top: 4px; }
+  .vu-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #58d68d, #d6a058, #f85149); transition: width 0.08s; border-radius: 3px; }
+
+  /* Oscilloscope canvas */
+  .scope-canvas {
+    display: block; background: #000810;
+    border-radius: 4px; border: 1px solid #1a3a1a;
+    margin: 4px 0;
+    box-shadow: inset 0 0 8px rgba(0,255,80,0.05);
+    image-rendering: pixelated;
+  }
+
+  /* Ports */
+  .node-ports { display: flex; justify-content: space-between; padding: 6px 0 6px; }
+  .ports-in, .ports-out { display: flex; flex-direction: column; gap: 6px; }
+  .ports-out { align-items: flex-end; }
+  .port { display: flex; align-items: center; gap: 6px; cursor: crosshair; }
+  .port.out { flex-direction: row-reverse; }
+  .port-dot {
+    width: 10px; height: 10px; border-radius: 50%; border: 2px solid #58d68d;
+    background: #1c2128; transition: all 0.15s; position: relative; z-index: 10; flex-shrink: 0;
+  }
+  .port-dot::before {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); width: 32px; height: 32px; border-radius: 50%;
+  }
+  .port-dot:hover, .port-dot.active { background: #58d68d; transform: scale(1.3); }
+  .port-dot.in { border-color: #5da0d0; }
+  .port-dot.in:hover { background: #5da0d0; }
+  .port-dot.snap-target { background: #58d68d !important; transform: scale(1.8) !important; box-shadow: 0 0 0 4px rgba(88,214,141,0.3), 0 0 14px rgba(88,214,141,0.5); }
+  .port-dot.in.snap-target { background: #5da0d0 !important; box-shadow: 0 0 0 4px rgba(93,160,208,0.3), 0 0 14px rgba(93,160,208,0.5); }
+  .port-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  #info-bar {
+    position: fixed; bottom: 0; left: 180px; right: 0; height: 28px;
+    background: #161b22; border-top: 1px solid #30363d;
+    display: flex; align-items: center; padding: 0 16px; gap: 24px;
+    font-size: 10px; color: #484f58; z-index: 50;
+  }
+  #info-bar span { color: #6e7681; }
+  #status-msg { margin-left: auto; color: #58d68d; }
+
+  /* ── Sequencer ─────────────────────────────────────────────── */
+  .seq-grid {
+    display: grid; gap: 3px; margin-top: 8px;
+  }
+  .seq-step {
+    display: flex; flex-direction: column; align-items: center;
+    background: #0f1117; border: 1px solid #30363d; border-radius: 3px;
+    padding: 4px 2px; cursor: pointer; transition: background 0.1s, border-color 0.1s;
+  }
+  .seq-step.active   { background: #162216; border-color: #3a7a3a; }
+  .seq-step.playing  { background: #1e3c1e; border-color: #58d68d;
+                       box-shadow: 0 0 8px rgba(88,214,141,0.35); }
+  .seq-step.inactive { opacity: 0.4; }
+  .seq-step-num { font-size: 8px; color: #484f58; margin-bottom: 2px; }
+  .seq-freq {
+    background: none; border: none; color: #6a8a6a;
+    font-family: inherit; font-size: 9px; width: 100%; text-align: center;
+    outline: none; padding: 1px 0; cursor: text;
+  }
+  .seq-step.active  .seq-freq { color: #8ac98a; }
+  .seq-step.playing .seq-freq { color: #58d68d; font-weight: 600; }
+  .seq-bpm-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .seq-note-label {
+    font-size: 8px; color: #58d68d; font-weight: 600;
+    min-height: 10px; margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <span class="logo">◈ SYNTH</span>
+  <div class="tb-sep"></div>
+  <button class="tb-btn play" id="play-btn" onclick="startAudio()">▶ Play</button>
+  <button class="tb-btn stop" id="stop-btn" onclick="stopAudio()">■ Stop</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="clearAll()">Clear</button>
+  <button class="tb-btn" onclick="autoArrange()">Auto Arrange</button>
+  <select class="tb-select" id="preset-select" onchange="loadPreset(this.value); this.value=''">
+    <option value="">Load preset…</option>
+    <optgroup label="Built-in">
+      <option value="drone">Drone</option>
+      <option value="wobble">Wobble Bass</option>
+      <option value="space">Space Echo</option>
+      <option value="fuzz">Fuzz Lead</option>
+      <option value="arpseq">Arp Sequencer</option>
+    </optgroup>
+    <optgroup label="Saved" id="user-preset-group"></optgroup>
+  </select>
+  <button class="tb-btn" onclick="savePreset()" style="border-color:#c97bff;color:#c97bff">Save…</button>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+    <span style="font-size:10px; color:#484f58;">VOL</span>
+    <input id="master-vol" type="range" min="0" max="1" step="0.01" value="0.3"
+      style="width:80px; accent-color:#58d68d; cursor:pointer"
+      oninput="setMasterVol(this.value)">
+    <span style="font-size:10px; color:#484f58; width:30px" id="vol-pct">30%</span>
+    <div class="tb-sep"></div>
+    <span style="font-size:10px; color:#484f58;">drag ports to connect · drag wire to rewire</span>
+  </div>
+</div>
+
+<div id="node-palette">
+  <div class="palette-section">
+    <div class="palette-label">Sources</div>
+    <div class="palette-item pi-source" draggable="true" data-type="oscillator">
+      <div class="item-name">Oscillator</div><div class="item-desc">Square/sine/saw/tri</div>
+    </div>
+    <div class="palette-item pi-source" draggable="true" data-type="noise">
+      <div class="item-name">Noise</div><div class="item-desc">White noise</div>
+    </div>
+    <div class="palette-item pi-mod" draggable="true" data-type="sequencer">
+      <div class="item-name">Sequencer</div><div class="item-desc">8-step note sequencer</div>
+    </div>
+  </div>
+  <div class="palette-section">
+    <div class="palette-label">Effects</div>
+    <div class="palette-item pi-effect" draggable="true" data-type="gain">
+      <div class="item-name">Gain</div><div class="item-desc">Volume / amplifier</div>
+    </div>
+    <div class="palette-item pi-effect" draggable="true" data-type="filter">
+      <div class="item-name">Filter</div><div class="item-desc">LP / HP / BP / notch</div>
+    </div>
+    <div class="palette-item pi-effect" draggable="true" data-type="delay">
+      <div class="item-name">Delay</div><div class="item-desc">Echo + feedback</div>
+    </div>
+    <div class="palette-item pi-effect" draggable="true" data-type="reverb">
+      <div class="item-name">Reverb</div><div class="item-desc">Convolution room</div>
+    </div>
+    <div class="palette-item pi-effect" draggable="true" data-type="distortion">
+      <div class="item-name">Distortion</div><div class="item-desc">Waveshaper drive</div>
+    </div>
+    <div class="palette-item pi-effect" draggable="true" data-type="compressor">
+      <div class="item-name">Compressor</div><div class="item-desc">Dynamics control</div>
+    </div>
+    <div class="palette-item pi-effect" draggable="true" data-type="mixer">
+      <div class="item-name">Mixer</div><div class="item-desc">3-channel sum + gain</div>
+    </div>
+  </div>
+  <div class="palette-section">
+    <div class="palette-label">Modulators</div>
+    <div class="palette-item pi-mod" draggable="true" data-type="lfo">
+      <div class="item-name">LFO</div><div class="item-desc">Modulate anything</div>
+    </div>
+  </div>
+  <div class="palette-section">
+    <div class="palette-label">Output</div>
+    <div class="palette-item pi-sink" draggable="true" data-type="speaker">
+      <div class="item-name">Speaker</div><div class="item-desc">Audio out + VU</div>
+    </div>
+    <div class="palette-item pi-sink" draggable="true" data-type="oscilloscope">
+      <div class="item-name">Oscilloscope</div><div class="item-desc">Waveform display</div>
+    </div>
+  </div>
+</div>
+
+<div id="canvas-area"><svg id="svg-layer"></svg></div>
+
+<div id="info-bar">
+  <span>nodes: <span id="stat-nodes">0</span></span>
+  <span>edges: <span id="stat-edges">0</span></span>
+  <span id="status-msg"></span>
+</div>
+
+<script>
+// ─── Node definitions ────────────────────────────────────────────────
+const NODE_DEFS = {
+  oscillator: {
+    label:'Oscillator', color:'#58d68d', kind:'source', ins:['freq','freq_mod'], outs:['signal'],
+    params:{ freq:220, wave:'square' },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Freq</span>
+        <input class="param-input" type="number" min="20" max="20000" value="${p.freq}"
+          onchange="updateParam('${id}','freq',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Wave</span>
+        <select class="param-select" onchange="updateParam('${id}','wave',this.value)">
+          ${['square','sine','sawtooth','triangle'].map(w=>`<option value="${w}"${p.wave===w?' selected':''}>${w}</option>`).join('')}
+        </select>
+      </div>`; }
+  },
+  noise: {
+    label:'Noise', color:'#58d68d', kind:'source', ins:[], outs:['signal'],
+    params:{ level:0.5 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Level</span>
+        <input class="param-input" type="number" min="0" max="1" step="0.05" value="${p.level}"
+          onchange="updateParam('${id}','level',this.value)">
+      </div>`; }
+  },
+  gain: {
+    label:'Gain', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    params:{ gain:0.5 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Gain</span>
+        <input class="param-input" type="number" min="0" max="2" step="0.05" value="${p.gain}"
+          onchange="updateParam('${id}','gain',this.value)">
+      </div>`; }
+  },
+  filter: {
+    label:'Filter', color:'#5da0d0', kind:'effect', ins:['signal','freq_mod'], outs:['signal'],
+    params:{ type:'lowpass', freq:800, q:1 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Type</span>
+        <select class="param-select" onchange="updateParam('${id}','type',this.value)">
+          ${['lowpass','highpass','bandpass','notch'].map(t=>`<option value="${t}"${p.type===t?' selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="param-row"><span class="param-label">Freq</span>
+        <input class="param-input" type="number" min="20" max="20000" value="${p.freq}"
+          onchange="updateParam('${id}','freq',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Q</span>
+        <input class="param-input" type="number" min="0.1" max="30" step="0.1" value="${p.q}"
+          onchange="updateParam('${id}','q',this.value)">
+      </div>`; }
+  },
+  delay: {
+    label:'Delay', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    params:{ time:0.3, feedback:0.4 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Time (s)</span>
+        <input class="param-input" type="number" min="0" max="5" step="0.05" value="${p.time}"
+          onchange="updateParam('${id}','time',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Feedback</span>
+        <input class="param-input" type="number" min="0" max="0.95" step="0.05" value="${p.feedback}"
+          onchange="updateParam('${id}','feedback',this.value)">
+      </div>`; }
+  },
+  reverb: {
+    label:'Reverb', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    params:{ duration:2, decay:2, wet:0.5 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Duration</span>
+        <input class="param-input" type="number" min="0.1" max="10" step="0.1" value="${p.duration}"
+          onchange="updateParam('${id}','duration',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Decay</span>
+        <input class="param-input" type="number" min="0.1" max="10" step="0.1" value="${p.decay}"
+          onchange="updateParam('${id}','decay',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Wet</span>
+        <input class="param-input" type="number" min="0" max="1" step="0.05" value="${p.wet}"
+          onchange="updateParam('${id}','wet',this.value)">
+      </div>`; }
+  },
+  distortion: {
+    label:'Distortion', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    params:{ amount:50 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Amount</span>
+        <input class="param-input" type="number" min="0" max="400" step="10" value="${p.amount}"
+          onchange="updateParam('${id}','amount',this.value)">
+      </div>`; }
+  },
+  compressor: {
+    label:'Compressor', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    params:{ threshold:-24, ratio:4, knee:10 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Threshold</span>
+        <input class="param-input" type="number" min="-100" max="0" value="${p.threshold}"
+          onchange="updateParam('${id}','threshold',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Ratio</span>
+        <input class="param-input" type="number" min="1" max="20" step="0.5" value="${p.ratio}"
+          onchange="updateParam('${id}','ratio',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Knee</span>
+        <input class="param-input" type="number" min="0" max="40" value="${p.knee}"
+          onchange="updateParam('${id}','knee',this.value)">
+      </div>`; }
+  },
+  lfo: {
+    label:'LFO', color:'#d6a058', kind:'mod', ins:[], outs:['mod'],
+    params:{ freq:2, depth:100 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Rate (Hz)</span>
+        <input class="param-input" type="number" min="0.01" max="30" step="0.1" value="${p.freq}"
+          onchange="updateParam('${id}','freq',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Depth</span>
+        <input class="param-input" type="number" min="0" max="5000" step="10" value="${p.depth}"
+          onchange="updateParam('${id}','depth',this.value)">
+      </div>`; }
+  },
+  speaker: {
+    label:'Speaker', color:'#c97bff', kind:'sink', ins:['signal'], outs:[],
+    params:{},
+    renderBody(id,p){ return `<div class="vu-bar"><div class="vu-fill" id="${id}-vu"></div></div>`; }
+  },
+  oscilloscope: {
+    label:'Oscilloscope', color:'#00dd66', kind:'sink', ins:['signal'], outs:[],
+    params:{ zoom:1 },
+    renderBody(id,p){ return `
+      <canvas class="scope-canvas" id="${id}-scope" width="158" height="80"></canvas>
+      <div class="param-row" style="margin-top:4px"><span class="param-label">Zoom</span>
+        <input class="param-input" type="number" min="0.1" max="10" step="0.1" value="${p.zoom}"
+          onchange="updateParam('${id}','zoom',this.value)">
+      </div>`; }
+  },
+
+  mixer: {
+    label:'Mixer', color:'#9b7bda', kind:'effect',
+    ins:['ch1','ch2','ch3'], outs:['signal'],
+    params:{ gain1:0.8, gain2:0.8, gain3:0.8 },
+    renderBody(id,p){ return `
+      <div class="param-row"><span class="param-label">Ch 1</span>
+        <input class="param-input" type="number" min="0" max="2" step="0.05" value="${p.gain1}"
+          onchange="updateParam('${id}','gain1',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Ch 2</span>
+        <input class="param-input" type="number" min="0" max="2" step="0.05" value="${p.gain2}"
+          onchange="updateParam('${id}','gain2',this.value)">
+      </div>
+      <div class="param-row"><span class="param-label">Ch 3</span>
+        <input class="param-input" type="number" min="0" max="2" step="0.05" value="${p.gain3}"
+          onchange="updateParam('${id}','gain3',this.value)">
+      </div>`; }
+  },
+
+  sequencer: {
+    label:'Sequencer', color:'#d6a058', kind:'mod',
+    minWidth: 290,
+    ins:[], outs:['freq'],
+    params:{
+      bpm: 120,
+      notes: [220, 294, 330, 392, 440, 392, 330, 294],
+      active:[1,   1,   1,   1,   1,   0,   1,   0  ]
+    },
+    renderBody(id,p){
+      const notes  = p.notes;
+      const active = p.active;
+      let steps = `
+      <div class="seq-bpm-row">
+        <span class="param-label">BPM</span>
+        <input class="param-input" type="number" min="30" max="300" value="${p.bpm}" style="width:70px"
+          onchange="updateParam('${id}','bpm',+this.value)">
+      </div>
+      <div class="seq-grid" id="${id}-grid" style="grid-template-columns:repeat(8,1fr)">`;
+      for (let i = 0; i < 8; i++) {
+        const cls = active[i] ? 'active' : 'inactive';
+        steps += `
+        <div class="seq-step ${cls}" id="${id}-s${i}" onclick="toggleStep('${id}',${i})">
+          <span class="seq-step-num">${i+1}</span>
+          <input class="seq-freq" type="number" value="${notes[i]}"
+            onclick="event.stopPropagation()"
+            onchange="updateStepFreq('${id}',${i},+this.value)">
+        </div>`;
+      }
+      steps += `</div>`;
+      return steps;
+    }
+  },
+};
+
+// ─── State ───────────────────────────────────────────────────────────
+let nodes={}, edges=[], nodeIdCounter=0;
+let dragging=null, dragOffset={x:0,y:0};
+let connecting=null, previewPath=null, selectedNode=null;
+let audioCtx=null, audioNodes={}, masterGain=null;
+let rafId=null;
+let seqState={}; // { [nodeId]: { step, intervalId } }
+
+const canvasEl = document.getElementById('canvas-area');
+const svgLayer = document.getElementById('svg-layer');
+
+// ─── Create node ─────────────────────────────────────────────────────
+function createNode(type, x, y, overrideParams={}) {
+  const def = NODE_DEFS[type];
+  if (!def) return;
+  const id = 'n'+(++nodeIdCounter);
+  // Deep-copy params so array values (e.g. sequencer notes/active) aren't shared
+  const params = {};
+  for (const [k,v] of Object.entries(def.params)) params[k] = Array.isArray(v) ? [...v] : v;
+  Object.assign(params, overrideParams);
+  nodes[id] = { id, type, def, x, y, params };
+
+  const el = document.createElement('div');
+  el.className = 'node'; el.id = id;
+  el.style.left = x+'px'; el.style.top = y+'px';
+  if (def.minWidth) el.style.minWidth = def.minWidth+'px';
+
+  const inPorts  = def.ins.map(p=>`
+    <div class="port in" data-node="${id}" data-port="${p}" data-dir="in">
+      <div class="port-dot in" data-node="${id}" data-port="${p}" data-dir="in"></div>
+      <span class="port-label">${p}</span>
+    </div>`).join('');
+  const outPorts = def.outs.map(p=>`
+    <div class="port out" data-node="${id}" data-port="${p}" data-dir="out">
+      <span class="port-label">${p}</span>
+      <div class="port-dot out" data-node="${id}" data-port="${p}" data-dir="out"></div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="node-header" data-node="${id}">
+      <div class="node-color-dot" style="background:${def.color}"></div>
+      <span class="node-title">${def.label}</span>
+      <button class="delete-btn" onclick="deleteNode('${id}')">×</button>
+    </div>
+    <div class="node-body">${def.renderBody(id,params)}</div>
+    <div class="node-ports">
+      <div class="ports-in">${inPorts}</div>
+      <div class="ports-out">${outPorts}</div>
+    </div>`;
+
+  canvasEl.appendChild(el);
+  el.querySelector('.node-header').addEventListener('mousedown', onHeaderMousedown);
+  el.querySelectorAll('.port-dot').forEach(d => d.addEventListener('mousedown', onPortMousedown));
+  updateStats();
+  return id;
+}
+
+function updateParam(id, key, val) {
+  if (!nodes[id]) return;
+  nodes[id].params[key] = val;
+  if (!audioCtx || !audioNodes[id]) return;
+  const an = audioNodes[id];
+  const t = audioCtx.currentTime;
+  try {
+    const n = nodes[id];
+    if (n.type==='oscillator') {
+      if (key==='freq') an.main.frequency.setTargetAtTime(+val,t,0.01);
+      if (key==='wave') an.main.type = val;
+    } else if (n.type==='noise') {
+      if (key==='level') an.gainNode.gain.setTargetAtTime(+val,t,0.01);
+    } else if (n.type==='gain') {
+      if (key==='gain') an.main.gain.setTargetAtTime(+val,t,0.01);
+    } else if (n.type==='filter') {
+      if (key==='type') an.main.type=val;
+      if (key==='freq') an.main.frequency.setTargetAtTime(+val,t,0.01);
+      if (key==='q') an.main.Q.setTargetAtTime(+val,t,0.01);
+    } else if (n.type==='delay') {
+      if (key==='time') an.main.delayTime.setTargetAtTime(+val,t,0.01);
+      if (key==='feedback') an.feedback.gain.setTargetAtTime(+val,t,0.01);
+    } else if (n.type==='compressor') {
+      if (key==='threshold') an.main.threshold.setTargetAtTime(+val,t,0.01);
+      if (key==='ratio') an.main.ratio.setTargetAtTime(+val,t,0.01);
+      if (key==='knee') an.main.knee.setTargetAtTime(+val,t,0.01);
+    } else if (n.type==='lfo') {
+      if (key==='freq') an.osc.frequency.setTargetAtTime(+val,t,0.01);
+      if (key==='depth') an.depth.gain.setTargetAtTime(+val,t,0.01);
+    } else if (n.type==='mixer') {
+      if (key==='gain1') an.ch1.gain.setTargetAtTime(+val,t,0.01);
+      if (key==='gain2') an.ch2.gain.setTargetAtTime(+val,t,0.01);
+      if (key==='gain3') an.ch3.gain.setTargetAtTime(+val,t,0.01);
+    } else if (n.type==='sequencer') {
+      if (key==='bpm' && seqState[id]) {
+        clearInterval(seqState[id].intervalId);
+        const tick=()=>{
+          if(!audioCtx||!nodes[id]) return;
+          const p=nodes[id].params, step=seqState[id].step;
+          for(let i=0;i<8;i++) document.getElementById(`${id}-s${i}`)?.classList.remove('playing');
+          if(p.active[step]){
+            const freq=p.notes[step];
+            edges.filter(e=>e.srcNode===id).forEach(e=>{
+              const an=audioNodes[e.dstNode];
+              if(an?.main?.frequency) an.main.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            });
+          }
+          document.getElementById(`${id}-s${seqState[id].step}`)?.classList.add('playing');
+          seqState[id].step=(step+1)%8;
+        };
+        seqState[id].intervalId=setInterval(tick, 60000/+val);
+      }
+    }
+  } catch(e) {}
+}
+
+// ─── Sequencer helpers ───────────────────────────────────────────────
+function toggleStep(id, i) {
+  if (!nodes[id]) return;
+  const p = nodes[id].params;
+  p.active[i] = p.active[i] ? 0 : 1;
+  const el = document.getElementById(`${id}-s${i}`);
+  if (el) {
+    el.classList.toggle('active',   !!p.active[i]);
+    el.classList.toggle('inactive', !p.active[i]);
+  }
+}
+function updateStepFreq(id, i, val) {
+  if (!nodes[id]) return;
+  nodes[id].params.notes[i] = val;
+}
+
+// ─── Drag nodes ──────────────────────────────────────────────────────
+function onHeaderMousedown(e) {
+  if (e.target.classList.contains('delete-btn')) return;
+  e.preventDefault();
+  const id = e.currentTarget.dataset.node;
+  dragging = id;
+  const el = document.getElementById(id);
+  const r = el.getBoundingClientRect();
+  dragOffset.x = e.clientX - r.left;
+  dragOffset.y = e.clientY - r.top;
+  selectNode(id);
+}
+
+document.addEventListener('mousemove', e => {
+  if (dragging) {
+    const cr = canvasEl.getBoundingClientRect();
+    const x = Math.max(0, e.clientX - cr.left - dragOffset.x);
+    const y = Math.max(0, e.clientY - cr.top  - dragOffset.y);
+    const el = document.getElementById(dragging);
+    el.style.left = x+'px'; el.style.top = y+'px';
+    nodes[dragging].x = x; nodes[dragging].y = y;
+    renderEdges();
+  }
+  if (connecting) {
+    const cr = canvasEl.getBoundingClientRect();
+    const mx = e.clientX-cr.left, my = e.clientY-cr.top;
+    if (!previewPath) {
+      previewPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+      previewPath.classList.add('edge-preview');
+      svgLayer.appendChild(previewPath);
+    }
+    const src = getPortPos(connecting.nodeId, connecting.port, connecting.dir);
+    const targetDir = connecting.dir==='out'?'in':'out';
+    let snapDot=null, snapDist=Infinity;
+    document.querySelectorAll(`.port-dot.${targetDir}`).forEach(dot=>{
+      if (dot.dataset.node===connecting.nodeId) return;
+      const r=dot.getBoundingClientRect();
+      const dist=Math.hypot(mx-(r.left+r.width/2-cr.left), my-(r.top+r.height/2-cr.top));
+      if (dist<40 && dist<snapDist){snapDist=dist;snapDot=dot;}
+    });
+    document.querySelectorAll('.port-dot.snap-target').forEach(d=>d.classList.remove('snap-target'));
+    if (snapDot) {
+      snapDot.classList.add('snap-target');
+      const r=snapDot.getBoundingClientRect();
+      previewPath.setAttribute('d',bezier(src.x,src.y,r.left+r.width/2-cr.left,r.top+r.height/2-cr.top));
+    } else {
+      previewPath.setAttribute('d',bezier(src.x,src.y,mx,my));
+    }
+  }
+});
+
+document.addEventListener('mouseup', e=>{
+  if (dragging) { dragging=null; }
+  if (connecting) {
+    document.querySelectorAll('.port-dot.snap-target').forEach(d=>d.classList.remove('snap-target'));
+    const cr=canvasEl.getBoundingClientRect();
+    const mx=e.clientX-cr.left, my=e.clientY-cr.top;
+    const targetDir=connecting.dir==='out'?'in':'out';
+    let resolved=null;
+    if (e.target?.classList?.contains('port-dot') && e.target.dataset.dir===targetDir && e.target.dataset.node!==connecting.nodeId)
+      resolved=e.target;
+    if (!resolved) {
+      let bestDist=Infinity;
+      document.querySelectorAll(`.port-dot.${targetDir}`).forEach(dot=>{
+        if (dot.dataset.node===connecting.nodeId) return;
+        const r=dot.getBoundingClientRect();
+        const dist=Math.hypot(mx-(r.left+r.width/2-cr.left),my-(r.top+r.height/2-cr.top));
+        if (dist<40 && dist<bestDist){bestDist=dist;resolved=dot;}
+      });
+    }
+    if (resolved) {
+      const [sN,sP,dN,dP]=connecting.dir==='out'
+        ?[connecting.nodeId,connecting.port,resolved.dataset.node,resolved.dataset.port]
+        :[resolved.dataset.node,resolved.dataset.port,connecting.nodeId,connecting.port];
+      addEdge(sN,sP,dN,dP);
+    }
+    if (previewPath){previewPath.remove();previewPath=null;}
+    connecting=null;
+  }
+});
+
+// ─── Ports ───────────────────────────────────────────────────────────
+function onPortMousedown(e) {
+  e.preventDefault(); e.stopPropagation();
+  connecting={nodeId:e.currentTarget.dataset.node,port:e.currentTarget.dataset.port,dir:e.currentTarget.dataset.dir};
+}
+function addEdge(sN,sP,dN,dP) {
+  if (edges.find(e=>e.srcNode===sN&&e.srcPort===sP&&e.dstNode===dN&&e.dstPort===dP)) return;
+  edges.push({id:'e'+edges.length,srcNode:sN,srcPort:sP,dstNode:dN,dstPort:dP});
+  renderEdges(); updateStats();
+}
+function deleteEdge(idx){edges.splice(idx,1);renderEdges();updateStats();}
+function deleteNode(id){
+  edges=edges.filter(e=>e.srcNode!==id&&e.dstNode!==id);
+  document.getElementById(id)?.remove(); delete nodes[id];
+  renderEdges(); updateStats();
+}
+function selectNode(id){
+  if(selectedNode) document.getElementById(selectedNode)?.classList.remove('selected');
+  selectedNode=id; document.getElementById(id)?.classList.add('selected');
+}
+function getPortPos(nodeId,portName,dir){
+  const el=document.getElementById(nodeId);
+  const cr=canvasEl.getBoundingClientRect();
+  for (const p of el.querySelectorAll('.port-dot'))
+    if (p.dataset.port===portName&&p.dataset.dir===dir){
+      const r=p.getBoundingClientRect();
+      return{x:r.left+r.width/2-cr.left,y:r.top+r.height/2-cr.top};
+    }
+  const r=el.getBoundingClientRect();
+  return{x:r.left-cr.left,y:r.top+r.height/2-cr.top};
+}
+function bezier(x1,y1,x2,y2){
+  const dx=Math.max(Math.abs(x2-x1)*0.5,40);
+  return`M${x1} ${y1} C${x1+dx} ${y1},${x2-dx} ${y2},${x2} ${y2}`;
+}
+function renderEdges(){
+  svgLayer.querySelectorAll('.edge-path,.edge-hit').forEach(p=>p.remove());
+  edges.forEach((edge,idx)=>{
+    if(!nodes[edge.srcNode]||!nodes[edge.dstNode]) return;
+    const src=getPortPos(edge.srcNode,edge.srcPort,'out');
+    const dst=getPortPos(edge.dstNode,edge.dstPort,'in');
+    const d=bezier(src.x,src.y,dst.x,dst.y);
+    const color=nodes[edge.srcNode].def.color;
+
+    function grabEdge(e){
+      e.preventDefault(); e.stopPropagation();
+      const cr=canvasEl.getBoundingClientRect();
+      const mx=e.clientX-cr.left, my=e.clientY-cr.top;
+      const dSrc=Math.hypot(mx-src.x,my-src.y);
+      const dDst=Math.hypot(mx-dst.x,my-dst.y);
+      // snapshot before deleteEdge mutates edges array
+      const fixedNode = dDst<=dSrc ? edge.srcNode : edge.dstNode;
+      const fixedPort = dDst<=dSrc ? edge.srcPort : edge.dstPort;
+      const fixedDir  = dDst<=dSrc ? 'out'        : 'in';
+      deleteEdge(idx);
+      connecting={nodeId:fixedNode, port:fixedPort, dir:fixedDir};
+    }
+
+    const hit=document.createElementNS('http://www.w3.org/2000/svg','path');
+    hit.classList.add('edge-hit'); hit.setAttribute('d',d);
+    hit.addEventListener('mousedown', grabEdge);
+    svgLayer.insertBefore(hit,previewPath);
+
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.classList.add('edge-path'); path.setAttribute('d',d); path.setAttribute('stroke',color);
+    path.addEventListener('mousedown', grabEdge);
+    svgLayer.insertBefore(path,previewPath);
+  });
+}
+
+// ─── Palette drag/drop ───────────────────────────────────────────────
+document.querySelectorAll('.palette-item').forEach(item=>
+  item.addEventListener('dragstart',e=>e.dataTransfer.setData('type',item.dataset.type)));
+canvasEl.addEventListener('dragover',e=>e.preventDefault());
+canvasEl.addEventListener('drop',e=>{
+  e.preventDefault();
+  const type=e.dataTransfer.getData('type'); if(!type) return;
+  const cr=canvasEl.getBoundingClientRect();
+  createNode(type,e.clientX-cr.left-85,e.clientY-cr.top-30);
+});
+
+// ─── Audio helpers ───────────────────────────────────────────────────
+function makeDistortionCurve(amount){
+  const n=256,curve=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=(i*2)/n-1;curve[i]=((Math.PI+amount)*x)/(Math.PI+amount*Math.abs(x));}
+  return curve;
+}
+function makeReverbIR(ctx,duration,decay){
+  const len=ctx.sampleRate*duration;
+  const buf=ctx.createBuffer(2,len,ctx.sampleRate);
+  for(let c=0;c<2;c++){
+    const d=buf.getChannelData(c);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);
+  }
+  return buf;
+}
+
+// ─── Audio engine ────────────────────────────────────────────────────
+function setMasterVol(v) {
+  document.getElementById('vol-pct').textContent = Math.round(v*100)+'%';
+  if (masterGain) masterGain.gain.setTargetAtTime(+v, audioCtx.currentTime, 0.01);
+}
+
+function startAudio(){
+  if(audioCtx) return;
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  audioNodes={};
+  masterGain=audioCtx.createGain();
+  masterGain.gain.value=+document.getElementById('master-vol').value;
+  masterGain.connect(audioCtx.destination);
+
+  Object.values(nodes).forEach(n=>{
+    const p=n.params;
+    switch(n.type){
+      case'oscillator':{
+        const osc=audioCtx.createOscillator();
+        osc.type=p.wave; osc.frequency.value=+p.freq;
+        audioNodes[n.id]={main:osc,input:null,output:osc,
+          audioParams:{freq_mod:osc.frequency}};
+        break;
+      }
+      case'noise':{
+        const sz=audioCtx.sampleRate*2;
+        const buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+        const d=buf.getChannelData(0);
+        for(let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+        const src=audioCtx.createBufferSource();
+        src.buffer=buf; src.loop=true;
+        const g=audioCtx.createGain(); g.gain.value=+p.level;
+        src.connect(g);
+        audioNodes[n.id]={main:src,gainNode:g,input:null,output:g};
+        break;
+      }
+      case'gain':{
+        const g=audioCtx.createGain(); g.gain.value=+p.gain;
+        audioNodes[n.id]={main:g,input:g,output:g};
+        break;
+      }
+      case'filter':{
+        const f=audioCtx.createBiquadFilter();
+        f.type=p.type; f.frequency.value=+p.freq; f.Q.value=+p.q;
+        audioNodes[n.id]={main:f,input:f,output:f,
+          audioParams:{freq_mod:f.frequency}};
+        break;
+      }
+      case'delay':{
+        const d=audioCtx.createDelay(10); d.delayTime.value=+p.time;
+        const fb=audioCtx.createGain(); fb.gain.value=+p.feedback;
+        d.connect(fb); fb.connect(d);
+        audioNodes[n.id]={main:d,feedback:fb,input:d,output:d};
+        break;
+      }
+      case'reverb':{
+        const conv=audioCtx.createConvolver();
+        conv.buffer=makeReverbIR(audioCtx,+p.duration,+p.decay);
+        const dry=audioCtx.createGain(); dry.gain.value=1-+p.wet;
+        const wet=audioCtx.createGain(); wet.gain.value=+p.wet;
+        const inn=audioCtx.createGain();  // input splitter
+        const out=audioCtx.createGain();  // output merger
+        inn.connect(dry); inn.connect(conv); conv.connect(wet);
+        dry.connect(out); wet.connect(out);
+        audioNodes[n.id]={main:conv,input:inn,output:out,dry,wet:wet};
+        break;
+      }
+      case'distortion':{
+        const ws=audioCtx.createWaveShaper();
+        ws.curve=makeDistortionCurve(+p.amount); ws.oversample='4x';
+        audioNodes[n.id]={main:ws,input:ws,output:ws};
+        break;
+      }
+      case'compressor':{
+        const c=audioCtx.createDynamicsCompressor();
+        c.threshold.value=+p.threshold; c.ratio.value=+p.ratio; c.knee.value=+p.knee;
+        audioNodes[n.id]={main:c,input:c,output:c};
+        break;
+      }
+      case'mixer':{
+        const ch1=audioCtx.createGain(); ch1.gain.value=+p.gain1;
+        const ch2=audioCtx.createGain(); ch2.gain.value=+p.gain2;
+        const ch3=audioCtx.createGain(); ch3.gain.value=+p.gain3;
+        const out=audioCtx.createGain(); out.gain.value=1;
+        ch1.connect(out); ch2.connect(out); ch3.connect(out);
+        audioNodes[n.id]={main:out, input:ch1, inputs:{ch1,ch2,ch3}, output:out, ch1,ch2,ch3};
+        break;
+      }
+      case'lfo':{
+        const osc=audioCtx.createOscillator(); osc.type='sine'; osc.frequency.value=+p.freq;
+        const depth=audioCtx.createGain(); depth.gain.value=+p.depth;
+        osc.connect(depth);
+        audioNodes[n.id]={osc,depth,main:osc,input:null,output:depth};
+        break;
+      }
+      case'speaker':{
+        const analyser=audioCtx.createAnalyser(); analyser.fftSize=256;
+        analyser.connect(masterGain);
+        audioNodes[n.id]={main:analyser,input:analyser,output:analyser,analyser};
+        break;
+      }
+      case'oscilloscope':{
+        const analyser=audioCtx.createAnalyser(); analyser.fftSize=512;
+        audioNodes[n.id]={main:analyser,input:analyser,output:analyser,analyser};
+        break;
+      }
+      case'sequencer':{
+        // No real Web Audio node — sequencer drives connected osc frequencies via JS timing
+        audioNodes[n.id]={main:null,input:null,output:null};
+        break;
+      }
+    }
+  });
+
+  // Wire edges (skip sequencer — it drives oscillators via JS timing)
+  edges.forEach(edge=>{
+    if(nodes[edge.srcNode]?.type==='sequencer') return; // handled separately
+    const src=audioNodes[edge.srcNode], dst=audioNodes[edge.dstNode];
+    if(!src||!dst) return;
+    // AudioParam modulation (e.g. freq_mod → filter.frequency)
+    const dstParam  = dst.audioParams?.[edge.dstPort];
+    // per-port input routing (e.g. mixer channels)
+    const dstInput  = dst.inputs?.[edge.dstPort] ?? dst.input;
+    const target = dstParam ?? dstInput;
+    if(!target) return;
+    try{src.output.connect(target);}catch(e){console.warn('connect failed',e);}
+  });
+
+  // Start sources
+  Object.values(audioNodes).forEach(an=>{
+    try{if(an.osc)an.osc.start();else if(an.main?.start)an.main.start();}catch(e){}
+  });
+
+  // Start sequencers
+  Object.values(nodes).filter(n=>n.type==='sequencer').forEach(n=>{
+    seqState[n.id]={step:0};
+    const tick=()=>{
+      if(!audioCtx||!nodes[n.id]) return;
+      const p=nodes[n.id].params;
+      const step=seqState[n.id].step;
+      // Clear previous playing highlights
+      for(let i=0;i<8;i++) document.getElementById(`${n.id}-s${i}`)?.classList.remove('playing');
+      if(p.active[step]){
+        const freq=p.notes[step];
+        edges.filter(e=>e.srcNode===n.id).forEach(e=>{
+          const an=audioNodes[e.dstNode];
+          if(an?.main?.frequency) an.main.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        });
+      }
+      document.getElementById(`${n.id}-s${step}`)?.classList.add('playing');
+      seqState[n.id].step=(step+1)%8;
+    };
+    tick(); // fire first step immediately
+    seqState[n.id].intervalId=setInterval(tick, 60000/+n.params.bpm);
+  });
+
+  // Animation loop — VU + scope
+  function drawLoop(){
+    rafId=requestAnimationFrame(drawLoop);
+    // VU meters
+    Object.values(nodes).filter(n=>n.type==='speaker').forEach(n=>{
+      const an=audioNodes[n.id]; const el=document.getElementById(n.id+'-vu');
+      if(!an?.analyser||!el) return;
+      const data=new Uint8Array(an.analyser.frequencyBinCount);
+      an.analyser.getByteTimeDomainData(data);
+      const rms=Math.sqrt(data.reduce((a,v)=>a+Math.pow((v-128)/128,2),0)/data.length);
+      el.style.width=Math.min(100,rms*400)+'%';
+    });
+    // Oscilloscopes
+    Object.values(nodes).filter(n=>n.type==='oscilloscope').forEach(n=>{
+      const an=audioNodes[n.id];
+      const canvas=document.getElementById(n.id+'-scope');
+      if(!an?.analyser||!canvas) return;
+      const ctx=canvas.getContext('2d');
+      const W=canvas.width, H=canvas.height;
+      const data=new Uint8Array(an.analyser.fftSize);
+      an.analyser.getByteTimeDomainData(data);
+      const zoom=+nodes[n.id].params.zoom||1;
+
+      // Phosphor trail — dark fade instead of full clear
+      ctx.fillStyle='rgba(0,8,16,0.35)';
+      ctx.fillRect(0,0,W,H);
+
+      // Grid
+      ctx.strokeStyle='rgba(0,100,40,0.25)'; ctx.lineWidth=0.5;
+      for(let i=1;i<4;i++){
+        ctx.beginPath(); ctx.moveTo(0,H*i/4); ctx.lineTo(W,H*i/4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(W*i/4,0); ctx.lineTo(W*i/4,H); ctx.stroke();
+      }
+
+      // Waveform — find trigger point (zero crossing going up)
+      let start=0;
+      for(let i=1;i<data.length/2;i++){
+        if(data[i-1]<128&&data[i]>=128){start=i;break;}
+      }
+      const visLen=Math.min(data.length-start, Math.floor(data.length/zoom));
+
+      ctx.beginPath();
+      ctx.strokeStyle='#00ff55';
+      ctx.lineWidth=1.5;
+      ctx.shadowBlur=6; ctx.shadowColor='#00ff55';
+      for(let i=0;i<visLen;i++){
+        const x=(i/visLen)*W;
+        const y=H/2-(data[start+i]-128)/128*(H/2)*0.9;
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      ctx.shadowBlur=0;
+    });
+  }
+  drawLoop();
+
+  Object.keys(nodes).forEach(id=>document.getElementById(id)?.classList.add('running'));
+  document.getElementById('play-btn').style.display='none';
+  document.getElementById('stop-btn').style.display='inline-block';
+  document.getElementById('status-msg').textContent='▶ playing';
+}
+
+function stopAudio(){
+  if(!audioCtx) return;
+  if(rafId){cancelAnimationFrame(rafId);rafId=null;}
+  // Stop sequencer intervals + clear step highlights
+  Object.entries(seqState).forEach(([id,st])=>{
+    clearInterval(st.intervalId);
+    for(let i=0;i<8;i++) document.getElementById(`${id}-s${i}`)?.classList.remove('playing');
+  });
+  seqState={};
+  Object.values(audioNodes).forEach(an=>{
+    try{if(an.osc)an.osc.stop();else if(an.main?.stop)an.main.stop();}catch(e){}
+    try{if(an.main?.disconnect)an.main.disconnect();}catch(e){}
+  });
+  audioCtx.close(); audioCtx=null; audioNodes={}; masterGain=null;
+  // Clear scopes
+  document.querySelectorAll('.scope-canvas').forEach(c=>{
+    const ctx=c.getContext('2d'); ctx.fillStyle='#000810'; ctx.fillRect(0,0,c.width,c.height);
+  });
+  document.querySelectorAll('.vu-fill').forEach(el=>el.style.width='0%');
+  Object.keys(nodes).forEach(id=>document.getElementById(id)?.classList.remove('running'));
+  document.getElementById('play-btn').style.display='inline-block';
+  document.getElementById('stop-btn').style.display='none';
+  document.getElementById('status-msg').textContent='';
+}
+
+// ─── Presets ─────────────────────────────────────────────────────────
+function loadPreset(name){
+  if(!name) return;
+  // User-saved preset
+  if (name.startsWith('user:')) {
+    const key = name.slice(5);
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (saved[key]) loadUserPreset(saved[key]);
+    return;
+  }
+  clearAll();
+  switch(name){
+
+    case'drone': {
+      // Simple hypnotic drone — detuned oscillators + filter sweep
+      const o1 = createNode('oscillator', 60, 80, {freq:110,wave:'sawtooth'});
+      const o2 = createNode('oscillator', 60,230, {freq:110.5,wave:'sawtooth'});
+      const g1 = createNode('gain', 290,100, {gain:0.4});
+      const g2 = createNode('gain', 290,230, {gain:0.4});
+      const flt= createNode('filter', 500,160, {type:'lowpass',freq:600,q:3});
+      const lfo= createNode('lfo',   500,320, {freq:0.2,depth:400});
+      const spk= createNode('speaker',720,160);
+      const scp= createNode('oscilloscope',720,280);
+      setTimeout(()=>{
+        addEdge(o1,'signal',g1,'signal'); addEdge(o2,'signal',g2,'signal');
+        addEdge(g1,'signal',flt,'signal'); addEdge(g2,'signal',flt,'signal');
+        addEdge(flt,'signal',spk,'signal'); addEdge(flt,'signal',scp,'signal');
+        addEdge(lfo,'mod',flt,'freq_mod');
+        renderEdges();
+      },50); break;
+    }
+
+    case'wobble': {
+      // Classic acid bass — square wave through resonant filter, fast LFO
+      const osc = createNode('oscillator', 60,100, {freq:80,wave:'square'});
+      const flt = createNode('filter',     290,80, {type:'lowpass',freq:300,q:8});
+      const dis = createNode('distortion', 500,80, {amount:30});
+      const gain= createNode('gain',       700,80, {gain:0.5});
+      const lfo = createNode('lfo',        290,270,{freq:1.5,depth:600});
+      const spk = createNode('speaker',    700,220);
+      const scp = createNode('oscilloscope',700,360);
+      setTimeout(()=>{
+        addEdge(osc,'signal',flt,'signal'); addEdge(flt,'signal',dis,'signal');
+        addEdge(dis,'signal',gain,'signal'); addEdge(gain,'signal',spk,'signal');
+        addEdge(gain,'signal',scp,'signal'); addEdge(lfo,'mod',flt,'freq_mod');
+        renderEdges();
+      },50); break;
+    }
+
+    case'space': {
+      // Spacious ambient — sine through long delay + reverb + scope
+      const osc = createNode('oscillator', 60,120, {freq:220,wave:'sine'});
+      const g1  = createNode('gain',       270,120,{gain:0.7});
+      const del = createNode('delay',      460,80, {time:0.6,feedback:0.65});
+      const rev = createNode('reverb',     460,240,{duration:4,decay:3,wet:0.6});
+      const g2  = createNode('gain',       680,160,{gain:0.35});
+      const lfo = createNode('lfo',        60, 290,{freq:0.15,depth:30});
+      const spk = createNode('speaker',    680,300);
+      const scp = createNode('oscilloscope',460,400);
+      setTimeout(()=>{
+        addEdge(osc,'signal',g1,'signal'); addEdge(g1,'signal',del,'signal');
+        addEdge(del,'signal',rev,'signal'); addEdge(rev,'signal',g2,'signal');
+        addEdge(g2,'signal',spk,'signal'); addEdge(g2,'signal',scp,'signal');
+        addEdge(lfo,'mod',osc,'freq_mod');
+        renderEdges();
+      },50); break;
+    }
+
+    case'fuzz': {
+      // Fuzz lead — sawtooth with fast LFO on filter + heavy distortion + compression
+      const osc = createNode('oscillator', 60, 80, {freq:220,wave:'sawtooth'});
+      const flt = createNode('filter',     280, 60,{type:'lowpass',freq:2000,q:3});
+      const dis = createNode('distortion', 490, 60,{amount:180});
+      const cmp = createNode('compressor', 700, 60,{threshold:-24,ratio:8,knee:6});
+      const gain= createNode('gain',       700,210,{gain:0.45});
+      const lfo = createNode('lfo',        280,240,{freq:5,depth:1800});
+      const spk = createNode('speaker',    700,340);
+      const scp = createNode('oscilloscope',490,260);
+      setTimeout(()=>{
+        addEdge(osc,'signal',flt,'signal'); addEdge(flt,'signal',dis,'signal');
+        addEdge(dis,'signal',cmp,'signal'); addEdge(cmp,'signal',gain,'signal');
+        addEdge(gain,'signal',spk,'signal'); addEdge(dis,'signal',scp,'signal');
+        addEdge(lfo,'mod',flt,'freq_mod');
+        renderEdges();
+      },50); break;
+    }
+
+    case'arpseq': {
+      // Step sequencer → square osc → filter → delay → gain → speaker + scope
+      // seq → osc → filter → delay → speaker;  filter also → scope
+      const seq = createNode('sequencer',  30,  30, {bpm:140});
+      const osc = createNode('oscillator', 340,  30, {freq:220, wave:'square'});
+      const flt = createNode('filter',     560,  30, {type:'lowpass', freq:800, q:6});
+      const del = createNode('delay',      560, 220, {time:0.21, feedback:0.35});
+      const spk = createNode('speaker',    780, 100);
+      const scp = createNode('oscilloscope', 780, 260);
+      setTimeout(()=>{
+        addEdge(seq,'freq',  osc,'freq');
+        addEdge(osc,'signal', flt,'signal');
+        addEdge(flt,'signal', del,'signal');
+        addEdge(del,'signal', spk,'signal');
+        addEdge(flt,'signal', scp,'signal');
+        renderEdges();
+      },50); break;
+    }
+  }
+}
+
+// ─── Auto Arrange ─────────────────────────────────────────────────────
+function autoArrange() {
+  const ids = Object.keys(nodes);
+  if (!ids.length) return;
+
+  // Longest-path depth assignment
+  const depth = {};
+  ids.forEach(id => depth[id] = 0);
+  for (let pass = 0; pass < ids.length; pass++) {
+    edges.forEach(e => {
+      if (nodes[e.srcNode] && nodes[e.dstNode]) {
+        const d = (depth[e.srcNode] || 0) + 1;
+        if (d > depth[e.dstNode]) depth[e.dstNode] = d;
+      }
+    });
+  }
+
+  // Group by column depth
+  const cols = {};
+  ids.forEach(id => {
+    const d = depth[id] || 0;
+    if (!cols[d]) cols[d] = [];
+    cols[d].push(id);
+  });
+
+  const colKeys = Object.keys(cols).sort((a,b) => a - b);
+  const PAD = 24, MIN_GAP_X = 12, MIN_GAP_Y = 10;
+  const canvasW = canvasEl.clientWidth  || 900;
+  const canvasH = canvasEl.clientHeight || 600;
+  const availW  = canvasW - PAD * 2;
+  const availH  = canvasH - PAD * 2;
+
+  // Measure each node's rendered size
+  const nW = {}, nH = {};
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    nW[id] = el ? el.offsetWidth  : 180;
+    nH[id] = el ? el.offsetHeight : 140;
+  });
+
+  // Max width per column
+  const colMaxW = {};
+  colKeys.forEach(col => colMaxW[col] = Math.max(...cols[col].map(id => nW[id])));
+
+  // Spread remaining horizontal space evenly as column gaps
+  const totalNodeW = colKeys.reduce((s,c) => s + colMaxW[c], 0);
+  const numColGaps = colKeys.length - 1;
+  const colGap = numColGaps > 0
+    ? Math.max(MIN_GAP_X, (availW - totalNodeW) / numColGaps)
+    : 0;
+
+  // Compute x positions
+  const colX = {};
+  let curX = PAD;
+  colKeys.forEach(col => { colX[col] = curX; curX += colMaxW[col] + colGap; });
+
+  // For each column, spread remaining vertical space evenly as row gaps
+  colKeys.forEach(col => {
+    const colNodes = cols[col];
+    const heights  = colNodes.map(id => nH[id]);
+    const totalNodeH = heights.reduce((a,b) => a+b, 0);
+    const numRowGaps = colNodes.length - 1;
+    const rowGap = numRowGaps > 0
+      ? Math.max(MIN_GAP_Y, (availH - totalNodeH) / numRowGaps)
+      : 0;
+    // Center vertically when there's slack
+    const usedH = totalNodeH + numRowGaps * rowGap;
+    let y = PAD + Math.max(0, (availH - usedH) / 2);
+
+    colNodes.forEach((id, ri) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.left = colX[col] + 'px';
+      el.style.top  = y + 'px';
+      nodes[id].x = colX[col];
+      nodes[id].y = y;
+      y += heights[ri] + rowGap;
+    });
+  });
+
+  renderEdges();
+}
+
+// ─── User Presets (localStorage) ─────────────────────────────────────
+const STORAGE_KEY = 'synth-user-presets';
+
+function savePreset() {
+  const name = prompt('Name this preset:');
+  if (!name || !name.trim()) return;
+  const key = name.trim();
+
+  // Serialize current graph
+  const data = {
+    name: key,
+    nodes: Object.values(nodes).map(n => ({
+      id: n.id, type: n.type, x: n.x, y: n.y,
+      params: JSON.parse(JSON.stringify(n.params))
+    })),
+    edges: edges.map(e => ({ ...e }))
+  };
+
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  saved[key] = data;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+  addUserPresetOption(key);
+  document.getElementById('status-msg').textContent = `✓ saved "${key}"`;
+  setTimeout(() => document.getElementById('status-msg').textContent = '', 2000);
+}
+
+function addUserPresetOption(name) {
+  const group = document.getElementById('user-preset-group');
+  if ([...group.options].some(o => o.value === 'user:' + name)) return;
+  const opt = document.createElement('option');
+  opt.value = 'user:' + name;
+  opt.textContent = name;
+  group.appendChild(opt);
+}
+
+function loadUserPreset(data) {
+  clearAll();
+  const idMap = {};
+  // Restore nodes with original positions
+  data.nodes.forEach(n => {
+    const newId = createNode(n.type, n.x, n.y, n.params);
+    idMap[n.id] = newId;
+  });
+  setTimeout(() => {
+    data.edges.forEach(e => {
+      const src = idMap[e.srcNode], dst = idMap[e.dstNode];
+      if (src && dst) addEdge(src, e.srcPort, dst, e.dstPort);
+    });
+    renderEdges();
+  }, 50);
+}
+
+function populateUserPresets() {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  Object.keys(saved).forEach(name => addUserPresetOption(name));
+}
+
+// ─── Utility ─────────────────────────────────────────────────────────
+function updateStats(){
+  document.getElementById('stat-nodes').textContent=Object.keys(nodes).length;
+  document.getElementById('stat-edges').textContent=edges.length;
+}
+function clearAll(){
+  stopAudio();
+  Object.keys(nodes).forEach(id=>document.getElementById(id)?.remove());
+  nodes={}; edges=[]; nodeIdCounter=0;
+  renderEdges(); updateStats();
+}
+
+// ─── Scroll-to-adjust number inputs ──────────────────────────────────
+document.addEventListener('wheel', e => {
+  const el = e.target;
+  if (el.tagName !== 'INPUT' || el.type !== 'number') return;
+  e.preventDefault();
+  const step = parseFloat(el.step) || 1;
+  const min  = el.min !== '' ? parseFloat(el.min)  : -Infinity;
+  const max  = el.max !== '' ? parseFloat(el.max)  :  Infinity;
+  const dir  = e.deltaY < 0 ? 1 : -1;
+  const newVal = Math.min(max, Math.max(min, parseFloat(el.value) + step * dir));
+  // round to same decimal places as step to avoid float noise
+  const decimals = (step.toString().split('.')[1] || '').length;
+  el.value = newVal.toFixed(decimals);
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}, { passive: false });
+
+// ─── Init ─────────────────────────────────────────────────────────────
+populateUserPresets();
+loadPreset('wobble');
+</script>
+</body>
+</html>
