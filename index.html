@@ -76,6 +76,7 @@
   #canvas-area.panning:active { cursor: grabbing; }
   #svg-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+    z-index: 15; /* above nodes so jack tips render on top */
   }
   .edge-path { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.88; transition: opacity 0.15s, filter 0.15s; pointer-events: visibleStroke; cursor: grab; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.7)); }
   .edge-path:hover { opacity: 1; filter: drop-shadow(0 2px 6px rgba(255,255,255,0.15)); }
@@ -93,6 +94,25 @@
     min-width: 170px;
     box-shadow: 0 0 0 1px #000, 2px 4px 24px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.04);
     user-select: none; transition: box-shadow 0.2s;
+    z-index: 5;
+  }
+  /* Rack handles — top and bottom grip strips */
+  .rack-handle {
+    height: 10px;
+    background: linear-gradient(to bottom, #1e1e1e, #161616);
+    border-bottom: 1px solid #2a2a2a;
+    display: flex; align-items: center; justify-content: center;
+    cursor: grab; gap: 4px;
+  }
+  .rack-handle.bottom {
+    background: linear-gradient(to top, #1e1e1e, #161616);
+    border-bottom: none; border-top: 1px solid #2a2a2a;
+  }
+  .rack-handle::before, .rack-handle::after {
+    content: ''; display: block;
+    width: 24px; height: 3px;
+    background: #2a2a2a; border-radius: 1px;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.04);
   }
   .node.selected { border-color: #aa00ff88; box-shadow: 0 0 0 1px #aa00ff44, 2px 4px 24px rgba(170,0,255,0.2); }
   .node.running  { box-shadow: 0 0 0 1px #00c85322, 0 0 18px rgba(0,200,83,0.12); }
@@ -918,6 +938,7 @@ function createNode(type, x, y, overrideParams={}) {
     </div>`).join('');
 
   el.innerHTML = `
+    <div class="rack-handle" data-node="${id}"></div>
     <div class="node-header" data-node="${id}">
       <div class="node-color-dot" style="background:${def.color}"></div>
       <span class="node-title">${def.label}</span>
@@ -927,10 +948,11 @@ function createNode(type, x, y, overrideParams={}) {
     <div class="node-ports">
       <div class="ports-in">${inPorts}</div>
       <div class="ports-out">${outPorts}</div>
-    </div>`;
+    </div>
+    <div class="rack-handle bottom" data-node="${id}"></div>`;
 
   canvasEl.appendChild(el);
-  el.querySelector('.node-header').addEventListener('mousedown', onHeaderMousedown);
+  el.querySelectorAll('.node-header, .rack-handle').forEach(h => h.addEventListener('mousedown', onHeaderMousedown));
   el.querySelectorAll('.port-dot').forEach(d => d.addEventListener('mousedown', onPortMousedown));
   initNodeKnobs(el);
   if (type === 'envelope') requestAnimationFrame(() => drawEnvelope(id));
