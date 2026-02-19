@@ -4,199 +4,328 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>synth.html v0.7.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: #0f1117; color: #e0e0e0;
-    font-family: 'IBM Plex Mono', 'Fira Code', monospace;
+    background: #0a0a0a;
+    background-image: repeating-linear-gradient(90deg, transparent, transparent 19px, #141414 19px, #141414 20px);
+    color: #e0e0e0;
+    font-family: 'Share Tech Mono', 'IBM Plex Mono', monospace;
     font-size: 12px; overflow: hidden; height: 100vh;
   }
   #toolbar {
     position: fixed; top: 0; left: 0; right: 0; height: 44px;
-    background: #161b22; border-bottom: 1px solid #30363d;
+    background: #080808; border-bottom: 1px solid #1c1c1c;
     display: flex; align-items: center; padding: 0 16px; gap: 8px; z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.9);
   }
-  .logo { font-size: 14px; font-weight: 700; color: #c97bff; letter-spacing: 1px; margin-right: 16px; }
+  .logo { font-size: 12px; font-weight: 700; color: #00c853; letter-spacing: 3px; margin-right: 16px; text-transform: uppercase; }
   .tb-btn {
-    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
-    padding: 4px 14px; border-radius: 4px; cursor: pointer;
-    font-family: inherit; font-size: 11px; transition: all 0.15s;
+    background: #111; border: 1px solid #2a2a2a; color: #888;
+    padding: 4px 14px; border-radius: 2px; cursor: pointer;
+    font-family: 'Share Tech Mono', monospace; font-size: 10px; transition: all 0.15s;
+    text-transform: uppercase; letter-spacing: 1px;
   }
-  .tb-btn:hover { background: #30363d; }
-  .tb-btn.play { border-color: #58d68d; color: #58d68d; }
-  .tb-btn.play:hover { background: #58d68d22; }
-  .tb-btn.stop { border-color: #f85149; color: #f85149; display: none; }
-  .tb-btn.stop:hover { background: #f8514922; }
+  .tb-btn:hover { background: #1a1a1a; border-color: #444; color: #aaa; }
+  .tb-btn.play { border-color: #00c853; color: #00c853; }
+  .tb-btn.play:hover { background: #00c85318; }
+  .tb-btn.stop { border-color: #ff1744; color: #ff1744; display: none; }
+  .tb-btn.stop:hover { background: #ff174418; }
   .tb-select {
-    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
-    padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 11px;
+    background: #111; border: 1px solid #2a2a2a; color: #888;
+    padding: 4px 8px; border-radius: 2px; font-family: 'Share Tech Mono', monospace; font-size: 10px;
     cursor: pointer; outline: none;
   }
-  .tb-sep { width: 1px; height: 24px; background: #30363d; margin: 0 4px; }
+  .tb-sep { width: 1px; height: 24px; background: #1c1c1c; margin: 0 4px; }
   #node-palette {
     position: fixed; top: 44px; left: 0; width: 180px; bottom: 0;
-    background: #161b22; border-right: 1px solid #30363d;
+    background: #0c0c0c;
+    border-right: 2px solid #181818;
     padding: 12px 8px 110px; overflow-y: auto; z-index: 50;
+    box-shadow: inset -4px 0 12px rgba(0,0,0,0.6);
   }
-  .palette-section { margin-bottom: 16px; }
-  .palette-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: #484f58; margin-bottom: 8px; padding: 0 4px; }
+  .palette-section { margin-bottom: 20px; }
+  .palette-label {
+    font-size: 7px; letter-spacing: 3px; text-transform: uppercase; color: #2a2a2a;
+    margin-bottom: 8px; padding: 0 4px 4px;
+    border-bottom: 1px solid #1a1a1a;
+  }
   .palette-item {
-    background: #21262d; border: 1px solid #30363d; border-left: 3px solid;
-    border-radius: 4px; padding: 8px 10px; margin-bottom: 4px;
+    background: #0f0f0f; border: 1px solid #1e1e1e; border-left: 3px solid;
+    border-radius: 2px; padding: 8px 10px; margin-bottom: 4px;
     cursor: grab; transition: all 0.15s; user-select: none;
   }
-  .palette-item:hover { background: #2d333b; transform: translateX(2px); }
-  .palette-item .item-name { font-size: 11px; color: #c9d1d9; }
-  .palette-item .item-desc { font-size: 9px; color: #484f58; margin-top: 2px; }
-  .pi-source { border-left-color: #58d68d; }
-  .pi-effect { border-left-color: #5da0d0; }
-  .pi-mod    { border-left-color: #d6a058; }
-  .pi-sink   { border-left-color: #c97bff; }
+  .palette-item:hover { background: #181818; transform: translateX(2px); border-color: #2a2a2a; }
+  .palette-item .item-name { font-size: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 1px; }
+  .palette-item .item-desc { font-size: 8px; color: #3a3a3a; margin-top: 2px; }
+  .pi-source { border-left-color: #00c853; }
+  .pi-effect { border-left-color: #2979ff; }
+  .pi-mod    { border-left-color: #ffab00; }
+  .pi-sink   { border-left-color: #aa00ff; }
   #canvas-area {
     position: fixed; top: 44px; left: 180px; right: 0; bottom: 0; overflow: hidden;
     transform-origin: 0 0;
-    background-image: radial-gradient(circle, rgba(80,90,100,0.55) 1px, transparent 1px);
-    background-size: 24px 24px;
+    background: #080808;
+    /* Dot grid at HP intervals (16px × 24px) */
+    background-image: radial-gradient(circle, rgba(52,52,52,0.85) 1px, transparent 1px);
+    background-size: 16px 24px;
   }
   #canvas-area.panning { cursor: grab; }
   #canvas-area.panning:active { cursor: grabbing; }
   #svg-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+    z-index: 15; /* above nodes so jack tips render on top */
   }
-  .edge-path { fill: none; stroke-width: 2; opacity: 0.6; transition: opacity 0.15s; pointer-events: visibleStroke; cursor: grab; }
-  .edge-path:hover { opacity: 1; }
-  .edge-hit { fill: none; stroke: transparent; stroke-width: 16; cursor: grab; pointer-events: stroke; }
-  .edge-preview { fill: none; stroke: #c97bff; stroke-width: 2; stroke-dasharray: 6,4; opacity: 0.4; pointer-events: none; }
+  .edge-path { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.88; transition: opacity 0.15s, filter 0.15s; pointer-events: visibleStroke; cursor: grab; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.7)); }
+  .edge-path:hover { opacity: 1; filter: drop-shadow(0 2px 6px rgba(255,255,255,0.15)); }
+  .edge-shadow { fill: none; stroke-width: 7; stroke-linecap: round; opacity: 0.25; pointer-events: none; }
+  .edge-tip { pointer-events: none; }
+  .edge-hit { fill: none; stroke: transparent; stroke-width: 20; cursor: grab; pointer-events: stroke; }
+  .edge-preview { fill: none; stroke: #aa00ff; stroke-width: 4; stroke-linecap: round; opacity: 0.5; pointer-events: none; }
 
-  /* Nodes */
+  /* ── Nodes — Eurorack panels ── */
   .node {
-    position: absolute; background: #1c2128; border: 1px solid #30363d;
-    border-radius: 6px; min-width: 170px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    position: absolute;
+    background: #0d0d0d;
+    border: 1px solid #242424;
+    border-radius: 2px;
+    min-width: 170px;
+    box-shadow: 0 0 0 1px #000, 2px 4px 24px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.04);
     user-select: none; transition: box-shadow 0.2s;
+    z-index: 5;
   }
-  .node.selected { border-color: #c97bff; box-shadow: 0 0 0 1px #c97bff55, 0 4px 20px rgba(201,123,255,0.15); }
-  .node.running  { box-shadow: 0 0 0 1px #58d68d33, 0 0 18px rgba(88,214,141,0.12); }
+  /* Rack handles — top and bottom grip strips */
+  .rack-handle {
+    height: 10px;
+    background: linear-gradient(to bottom, #1e1e1e, #161616);
+    border-bottom: 1px solid #2a2a2a;
+    display: flex; align-items: center; justify-content: center;
+    cursor: grab; gap: 4px;
+  }
+  .rack-handle.bottom {
+    background: linear-gradient(to top, #1e1e1e, #161616);
+    border-bottom: none; border-top: 1px solid #2a2a2a;
+  }
+  .rack-handle::before, .rack-handle::after {
+    content: ''; display: block;
+    width: 24px; height: 3px;
+    background: #2a2a2a; border-radius: 1px;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .node.selected { border-color: #aa00ff88; box-shadow: 0 0 0 1px #aa00ff44, 2px 4px 24px rgba(170,0,255,0.2); }
+  .node.running  { box-shadow: 0 0 0 1px #00c85322, 0 0 18px rgba(0,200,83,0.12); }
   .node-header {
-    padding: 7px 10px; border-bottom: 1px solid #30363d; border-radius: 6px 6px 0 0;
-    cursor: grab; display: flex; align-items: center; gap: 7px; background: #21262d;
+    padding: 8px 10px 6px;
+    cursor: grab; display: flex; align-items: center; gap: 7px;
+    background: #111; border-radius: 2px 2px 0 0;
+    border-bottom: 2px solid #1a1a1a;
   }
   .node-header:active { cursor: grabbing; }
-  .node-color-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .node-title { font-size: 10px; font-weight: 600; color: #c9d1d9; flex: 1; letter-spacing: 0.5px; text-transform: uppercase; }
-  .delete-btn { background: none; border: none; color: #484f58; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; transition: color 0.15s; }
-  .delete-btn:hover { color: #f85149; }
+  /* Type-specific accent stripe */
+  .node-source > .node-header { border-bottom-color: #00c853; }
+  .node-effect > .node-header { border-bottom-color: #2979ff; }
+  .node-mod    > .node-header { border-bottom-color: #ffab00; }
+  .node-sink   > .node-header { border-bottom-color: #aa00ff; }
+  .node-color-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .node-title {
+    font-size: 9px; font-weight: 400; color: #ddd; flex: 1;
+    letter-spacing: 3px; text-transform: uppercase; text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .delete-btn { background: none; border: none; color: #2a2a2a; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; transition: color 0.15s; }
+  .delete-btn:hover { color: #ff1744; }
   .node-body { padding: 10px 12px 6px; }
-  .param-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px; }
-  .param-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+  .param-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; gap: 8px; }
+  .param-label { font-size: 7px; color: #444; text-transform: uppercase; letter-spacing: 1.5px; flex-shrink: 0; }
   .param-input {
-    background: #0d1117; border: 1px solid #21262d; border-radius: 3px;
-    color: #79c0ff; font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 3px 7px;
+    background: #060606; border: 1px solid #1e1e1e; border-radius: 1px;
+    color: #ffab00; font-family: 'Share Tech Mono', monospace; font-size: 11px; padding: 3px 7px;
     width: 76px; text-align: right; outline: none; transition: border-color 0.15s, color 0.15s;
     cursor: ns-resize; user-select: none; -moz-appearance: textfield;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.8);
   }
-  .param-input:focus { border-color: #c97bff; color: #e0e0e0; cursor: text; }
-  .param-input:hover:not(:focus) { border-color: #444d56; color: #a8d8ff; }
+  .param-input:focus { border-color: #aa00ff; color: #fff; cursor: text; }
+  .param-input:hover:not(:focus) { border-color: #2a2a2a; color: #ffc107; }
   /* Hide browser spinners */
   .param-input::-webkit-outer-spin-button,
   .param-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .param-select {
-    background: #0f1117; border: 1px solid #30363d; border-radius: 3px;
-    color: #c9d1d9; font-family: inherit; font-size: 10px; padding: 2px 4px; width: 90px; outline: none;
+    background: #060606; border: 1px solid #1e1e1e; border-radius: 1px;
+    color: #888; font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    padding: 2px 4px; width: 90px; outline: none; text-transform: uppercase; letter-spacing: 1px;
   }
 
   /* VU bar */
-  .vu-bar { height: 6px; border-radius: 3px; background: #21262d; overflow: hidden; margin-top: 4px; }
-  .vu-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #58d68d, #d6a058, #f85149); transition: width 0.08s; border-radius: 3px; }
+  .vu-bar { height: 5px; border-radius: 0; background: #080808; overflow: hidden; margin-top: 4px; border: 1px solid #1a1a1a; }
+  .vu-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00c853, #ffab00, #ff1744); transition: width 0.08s; }
 
   /* Oscilloscope canvas */
   .scope-canvas {
     display: block; background: #000810;
-    border-radius: 4px; border: 1px solid #1a3a1a;
+    border-radius: 1px; border: 1px solid #001a10;
     margin: 4px 0;
     box-shadow: inset 0 0 8px rgba(0,255,80,0.05);
     image-rendering: pixelated;
   }
 
-  /* Ports */
-  .node-ports { display: flex; justify-content: space-between; padding: 6px 0 6px; }
-  .ports-in, .ports-out { display: flex; flex-direction: column; gap: 6px; }
+  /* ── Ports — 3.5mm patch jacks ── */
+  .node-ports { display: flex; justify-content: space-between; padding: 6px 2px 8px; gap: 4px; }
+  .ports-in, .ports-out { display: flex; flex-direction: column; gap: 8px; }
   .ports-out { align-items: flex-end; }
-  .port { display: flex; align-items: center; gap: 6px; cursor: crosshair; }
-  .port.out { flex-direction: row-reverse; }
+  .port { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: crosshair; }
+  .port.in  { align-items: flex-start; }
+  .port.out { align-items: flex-end; }
   .port-dot {
-    width: 10px; height: 10px; border-radius: 50%; border: 2px solid #58d68d;
-    background: #1c2128; transition: all 0.15s; position: relative; z-index: 10; flex-shrink: 0;
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 3px solid #00c853;
+    background: #000;
+    transition: all 0.15s; position: relative; z-index: 10; flex-shrink: 0;
+    box-shadow: 0 0 0 1px #000, inset 0 0 4px rgba(0,0,0,0.9);
   }
   .port-dot::before {
     content: ''; position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%); width: 32px; height: 32px; border-radius: 50%;
   }
-  .port-dot:hover, .port-dot.active { background: #58d68d; transform: scale(1.3); }
-  .port-dot.in { border-color: #5da0d0; }
-  .port-dot.in:hover { background: #5da0d0; }
-  .port-dot.snap-target { background: #58d68d !important; transform: scale(1.8) !important; box-shadow: 0 0 0 4px rgba(88,214,141,0.3), 0 0 14px rgba(88,214,141,0.5); }
-  .port-dot.in.snap-target { background: #5da0d0 !important; box-shadow: 0 0 0 4px rgba(93,160,208,0.3), 0 0 14px rgba(93,160,208,0.5); }
-  .port-label { font-size: 9px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; }
+  .port-dot:hover, .port-dot.active { background: #00c85322; transform: scale(1.2); box-shadow: 0 0 8px #00c853, 0 0 0 1px #000; }
+  .port-dot.in { border-color: #2979ff; }
+  .port-dot.in:hover { background: #2979ff22; box-shadow: 0 0 8px #2979ff, 0 0 0 1px #000; }
+  /* Output jack colors by module type */
+  .node-source .port-dot.out { border-color: #00c853; }
+  .node-effect .port-dot.out { border-color: #2979ff; }
+  .node-mod    .port-dot.out { border-color: #ffab00; }
+  .node-sink   .port-dot.out { border-color: #aa00ff; }
+  .node-source .port-dot.out:hover { background: #00c85322; box-shadow: 0 0 8px #00c853, 0 0 0 1px #000; }
+  .node-effect .port-dot.out:hover { background: #2979ff22; box-shadow: 0 0 8px #2979ff, 0 0 0 1px #000; }
+  .node-mod    .port-dot.out:hover { background: #ffab0022; box-shadow: 0 0 8px #ffab00, 0 0 0 1px #000; }
+  .node-sink   .port-dot.out:hover { background: #aa00ff22; box-shadow: 0 0 8px #aa00ff, 0 0 0 1px #000; }
+  .port-dot.snap-target { background: #00c85333 !important; transform: scale(1.7) !important; box-shadow: 0 0 0 3px rgba(0,200,83,0.3), 0 0 14px rgba(0,200,83,0.6) !important; }
+  .port-dot.in.snap-target { background: #2979ff33 !important; box-shadow: 0 0 0 3px rgba(41,121,255,0.3), 0 0 14px rgba(41,121,255,0.6) !important; }
+  .port-label { font-size: 7px; color: #383838; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1; }
 
   #info-bar {
-    position: fixed; bottom: 0; left: 180px; right: 0; height: 28px;
-    background: #161b22; border-top: 1px solid #30363d;
+    position: fixed; bottom: 0; left: 180px; right: 0; height: 26px;
+    background: #060606; border-top: 1px solid #181818;
     display: flex; align-items: center; padding: 0 16px; gap: 24px;
-    font-size: 10px; color: #484f58; z-index: 50;
+    font-size: 9px; color: #2a2a2a; z-index: 50; letter-spacing: 1.5px; text-transform: uppercase;
   }
-  #info-bar span { color: #6e7681; }
-  #status-msg { margin-left: auto; color: #58d68d; }
+  #info-bar span { color: #383838; }
+  #status-msg { margin-left: auto; color: #00c853; letter-spacing: 2px; }
 
-  /* ── Perf monitor ──────────────────────────────────────────── */
+  /* ── Perf monitor ── */
   #perf-panel {
     position: absolute; bottom: 0; left: 0; right: 0;
-    padding: 10px 8px 12px; border-top: 1px solid #30363d;
-    background: #161b22;
+    padding: 10px 8px 12px; border-top: 1px solid #181818;
+    background: #0a0a0a;
   }
-  .perf-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: #484f58; margin-bottom: 6px; }
-  .perf-row { display: flex; justify-content: space-between; font-size: 10px; color: #6e7681; margin-bottom: 4px; }
-  .perf-val { color: #c9d1d9; font-variant-numeric: tabular-nums; }
-  #perf-canvas { display: block; width: 100%; height: 40px; border-radius: 3px; background: #0f1117; border: 1px solid #21262d; margin-top: 6px; }
+  .perf-label { font-size: 7px; letter-spacing: 3px; text-transform: uppercase; color: #282828; margin-bottom: 6px; }
+  .perf-row { display: flex; justify-content: space-between; font-size: 9px; color: #383838; margin-bottom: 4px; }
+  .perf-val { color: #666; font-variant-numeric: tabular-nums; }
+  #perf-canvas { display: block; width: 100%; height: 40px; border-radius: 1px; background: #060606; border: 1px solid #181818; margin-top: 6px; }
 
-  /* ── Sequencer ─────────────────────────────────────────────── */
-  .seq-grid {
-    display: grid; gap: 3px; margin-top: 8px;
-  }
+  /* ── Sequencer ── */
+  .seq-grid { display: grid; gap: 3px; margin-top: 8px; }
   .seq-step {
     display: flex; flex-direction: column; align-items: center;
-    background: #0f1117; border: 1px solid #30363d; border-radius: 3px;
+    background: #080808; border: 1px solid #1e1e1e; border-radius: 1px;
     padding: 4px 2px; cursor: pointer; transition: background 0.1s, border-color 0.1s;
   }
-  .seq-step.active   { background: #162216; border-color: #3a7a3a; }
-  .seq-step.playing  { background: #1e3c1e; border-color: #58d68d;
-                       box-shadow: 0 0 8px rgba(88,214,141,0.35); }
-  .seq-step.inactive { opacity: 0.4; }
-  .seq-step-num { font-size: 8px; color: #484f58; margin-bottom: 2px; }
+  .seq-step.active   { background: #071007; border-color: #00c85366; }
+  .seq-step.playing  { background: #0a1a0a; border-color: #00c853; box-shadow: 0 0 8px rgba(0,200,83,0.4); }
+  .seq-step.inactive { opacity: 0.25; }
+  .seq-step-num { font-size: 7px; color: #2a2a2a; margin-bottom: 2px; }
   .seq-freq {
-    background: none; border: none; color: #6a8a6a;
-    font-family: inherit; font-size: 9px; width: 100%; text-align: center;
+    background: none; border: none; color: #3a5a3a;
+    font-family: 'Share Tech Mono', monospace; font-size: 9px; width: 100%; text-align: center;
     outline: none; padding: 1px 0; cursor: text;
   }
-  .seq-step.active  .seq-freq { color: #8ac98a; }
-  .seq-step.playing .seq-freq { color: #58d68d; font-weight: 600; }
+  .seq-step.active  .seq-freq { color: #00c85388; }
+  .seq-step.playing .seq-freq { color: #00c853; font-weight: 600; }
   .seq-bpm-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .seq-note-label {
-    font-size: 8px; color: #58d68d; font-weight: 600;
-    min-height: 10px; margin-top: 2px;
+    font-size: 7px; color: #00c853; font-weight: 600; min-height: 10px; margin-top: 2px;
   }
+/* ── HP overlap highlight ── */
+.node.hp-overlap { outline: 2px solid rgba(255,50,50,0.5); background: linear-gradient(rgba(255,0,0,0.05), rgba(255,0,0,0.05)) !important; }
+
+/* ── Drum Machine ── */
+.dm-panel { padding: 0; width: 100%; }
+.dm-controls { display:flex; align-items:center; gap:6px; padding:0 0 6px; border-bottom:1px solid #1e1e1e; margin-bottom:5px; flex-wrap:wrap; }
+.dm-channel { display:flex; align-items:center; gap:0; margin-bottom:3px; height:22px; }
+.dm-ch-label { font-size:6px; color:#555; text-transform:uppercase; letter-spacing:1px; width:46px; flex-shrink:0; text-align:right; padding-right:5px; line-height:22px; white-space:nowrap; }
+.dm-steps { display:flex; gap:2px; flex:1; }
+.dm-step { width:20px; height:20px; border-radius:1px; background:#0d0d0d; border:1px solid #1e1e1e; cursor:pointer; transition:background 0.05s,border-color 0.05s; flex-shrink:0; }
+.dm-step.beat1 { border-left-color:#2d2d2d; }
+.dm-step.grp2  { margin-left:3px; }
+.dm-step.on    { background:#071507; border-color:#00c85355; }
+.dm-step.playing { background:#00c853 !important; border-color:#00ff66 !important; box-shadow:0 0 6px rgba(0,200,83,0.8) !important; }
+.dm-step:hover:not(.playing) { border-color:#444; background:#181818; }
+.dm-led { width:7px; height:7px; border-radius:50%; background:#0d0d0d; border:1px solid #1e1e1e; flex-shrink:0; transition:background 0.04s,box-shadow 0.04s; margin-left:4px; }
+.dm-led.active { background:var(--led-color,#00c853); box-shadow:0 0 5px var(--led-color,#00c853); }
+.dm-btn { background:#0d0d0d; border:1px solid #2a2a2a; color:#555; padding:3px 10px; border-radius:2px; cursor:pointer; font-family:'Share Tech Mono',monospace; font-size:9px; text-transform:uppercase; letter-spacing:1px; transition:all 0.15s; }
+.dm-btn:hover { background:#1a1a1a; border-color:#555; color:#aaa; }
+.dm-btn.running { border-color:#00c853; color:#00c853; }
+.dm-btn.running:hover { background:#00c85318; }
+.dm-bpm { background:#060606; border:1px solid #1e1e1e; border-radius:1px; color:#ffab00; font-family:'Share Tech Mono',monospace; font-size:10px; padding:2px 5px; width:50px; text-align:right; outline:none; -moz-appearance:textfield; }
+.dm-bpm::-webkit-outer-spin-button,.dm-bpm::-webkit-inner-spin-button{-webkit-appearance:none;}
+.dm-label { font-size:7px; color:#444; text-transform:uppercase; letter-spacing:1px; flex-shrink:0; }
+.dm-swing { background:#060606; border:1px solid #1e1e1e; border-radius:1px; color:#888; font-family:'Share Tech Mono',monospace; font-size:10px; padding:2px 4px; width:34px; text-align:right; outline:none; -moz-appearance:textfield; }
+.dm-swing::-webkit-outer-spin-button,.dm-swing::-webkit-inner-spin-button{-webkit-appearance:none;}
+.dm-vol-r { -webkit-appearance:none; appearance:none; width:28px; height:4px; border-radius:2px; background:#222; outline:none; cursor:pointer; flex-shrink:0; margin:0 3px; vertical-align:middle; }
+.dm-vol-r::-webkit-slider-thumb { -webkit-appearance:none; width:8px; height:14px; background:#444; border-radius:2px; cursor:ns-resize; }
+.dm-vol-r::-moz-range-thumb { width:8px; height:14px; background:#444; border-radius:2px; border:none; cursor:ns-resize; }
+
 @keyframes node-land {
   0%   { transform: scale(1, 1);    box-shadow: none; }
-  12%  { transform: scale(1.015, 0.97); } /* brief compress on impact */
-  35%  { transform: scale(0.99, 1.01); } /* tiny rebound */
+  12%  { transform: scale(1.015, 0.97); }
+  35%  { transform: scale(0.99, 1.01); }
   100% { transform: scale(1, 1); }
 }
 .node-land { animation: node-land 0.28s ease-out forwards; }
 @keyframes node-delete {
   0%   { transform: scale(1);    opacity: 1; filter: brightness(1); }
-  20%  { transform: scale(1.04); opacity: 1; filter: brightness(1.5) hue-rotate(20deg); }
-  100% { transform: scale(0.8);  opacity: 0; filter: brightness(0.5); }
+  20%  { transform: scale(1.04); opacity: 1; filter: brightness(2) hue-rotate(40deg); }
+  100% { transform: scale(0.8);  opacity: 0; filter: brightness(0.2); }
 }
 .node-delete { animation: node-delete 0.22s ease-in forwards; pointer-events: none; }
+
+/* ── Rotary knob system ── */
+.knob-wrap {
+  display: inline-flex; flex-direction: column; align-items: center;
+  gap: 3px; cursor: ns-resize; user-select: none;
+}
+.knob {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #3a3a3a, #0d0d0d);
+  border: 2px solid #3a3a3a;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: border-color 0.15s;
+}
+.knob:hover { border-color: #555; }
+.knob::after {
+  content: '';
+  position: absolute;
+  width: 2px; height: 11px;
+  background: #fff;
+  top: 4px; left: 50%;
+  transform: translateX(-50%) rotate(var(--rot, -135deg));
+  border-radius: 1px;
+  transform-origin: bottom center;
+  box-shadow: 0 0 3px rgba(255,255,255,0.4);
+}
+.knob-val {
+  font-size: 8px; color: #555;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.5px;
+}
+
+/* ── Help / Share modals inherit correct font ── */
+#help-modal, #share-url-input {
+  font-family: 'Share Tech Mono', monospace !important;
+}
 </style>
 </head>
 <body>
@@ -222,6 +351,7 @@
       <option value="pingpong">Ping-Pong Echo</option>
       <option value="keyjam">Keyboard Jam</option>
       <option value="envdemo">Envelope ADSR</option>
+      <option value="drum_loop">Drum Loop</option>
     </optgroup>
     <optgroup label="Saved" id="user-preset-group"></optgroup>
   </select>
@@ -241,7 +371,7 @@
 
 <!-- Help Modal -->
 <div id="help-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;display:none;align-items:center;justify-content:center">
-  <div id="help-modal" style="background:#161b22;border:1px solid #30363d;border-radius:8px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto;padding:32px;position:relative;font-size:12px;line-height:1.7">
+  <div id="help-modal" style="background:#0d0d0d;border:1px solid #222;border-radius:8px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto;padding:32px;position:relative;font-size:12px;line-height:1.7">
     <button onclick="closeHelp()" style="position:absolute;top:14px;right:16px;background:none;border:none;color:#484f58;font-size:18px;cursor:pointer;line-height:1">✕</button>
 
     <div style="font-size:22px;font-weight:700;color:#c97bff;letter-spacing:1px;margin-bottom:4px">◈ synth.html</div>
@@ -291,20 +421,20 @@
 
 <!-- Share Modal -->
 <div id="share-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px 28px;width:520px;max-width:92vw;position:relative;font-family:'IBM Plex Mono',monospace">
+  <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;padding:24px 28px;width:520px;max-width:92vw;position:relative;font-family:'Share Tech Mono',monospace">
     <button onclick="closeShareModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:#484f58;font-size:18px;cursor:pointer;line-height:1">✕</button>
     <div style="font-size:13px;font-weight:700;color:#58d68d;letter-spacing:1px;margin-bottom:4px">⬡ Share Patch</div>
     <div id="share-patch-name" style="font-size:10px;color:#6e7681;margin-bottom:16px;font-style:italic"></div>
     <div style="display:flex;gap:8px;align-items:center">
       <input id="share-url-input" readonly
         style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#79c0ff;
-               font-family:'IBM Plex Mono',monospace;font-size:11px;padding:8px 10px;outline:none;
+               font-family:'Share Tech Mono',monospace;font-size:11px;padding:8px 10px;outline:none;
                cursor:text;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
         onclick="this.select()"
         value="">
       <button id="share-copy-btn" onclick="copyShareUrl()"
         style="background:#21262d;border:1px solid #58d68d;color:#58d68d;
-               font-family:'IBM Plex Mono',monospace;font-size:11px;padding:8px 14px;
+               font-family:'Share Tech Mono',monospace;font-size:11px;padding:8px 14px;
                border-radius:4px;cursor:pointer;white-space:nowrap;transition:all 0.15s"
         onmouseover="this.style.background='#58d68d22'"
         onmouseout="this.style.background='#21262d'">Copy</button>
@@ -327,6 +457,9 @@
     </div>
     <div class="palette-item pi-mod" draggable="true" data-type="sequencer">
       <div class="item-name">Sequencer</div><div class="item-desc">8-step note sequencer</div>
+    </div>
+    <div class="palette-item pi-source" draggable="true" data-type="drum_machine" style="border-left-color:#ff6d00">
+      <div class="item-name">Drum Machine</div><div class="item-desc">16-step, 6 channels</div>
     </div>
   </div>
   <div class="palette-section">
@@ -410,7 +543,7 @@
 // ─── Node definitions ────────────────────────────────────────────────
 const NODE_DEFS = {
   oscillator: {
-    label:'Oscillator', color:'#58d68d', kind:'source', ins:['freq','freq_mod'], outs:['signal'],
+    label:'Oscillator', color:'#00c853', kind:'source', ins:['freq','freq_mod'], outs:['signal'],
     params:{ freq:220, wave:'square' },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Freq</span>
@@ -424,7 +557,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   noise: {
-    label:'Noise', color:'#58d68d', kind:'source', ins:[], outs:['signal'],
+    label:'Noise', color:'#00c853', kind:'source', ins:[], outs:['signal'],
     params:{ level:0.5 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Level</span>
@@ -433,7 +566,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   keyboard: {
-    label:'Keyboard', color:'#c97bff', kind:'source', ins:[], outs:['freq','gate'],
+    label:'Keyboard', color:'#00c853', kind:'source', ins:[], outs:['freq','gate'],
     minWidth: 220,
     params: { octave: 4 },
     renderBody(id, p) {
@@ -458,7 +591,7 @@ const NODE_DEFS = {
     }
   },
   envelope: {
-    label:'Envelope', color:'#d6a058', kind:'effect', ins:['signal','gate'], outs:['signal'],
+    label:'Envelope', color:'#2979ff', kind:'effect', ins:['signal','gate'], outs:['signal'],
     params:{ attack:0.01, decay:0.15, sustain:0.7, release:0.4 },
     renderBody(id,p){ return `
       <canvas id="${id}-env-cv" width="160" height="54"
@@ -482,7 +615,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   gain: {
-    label:'Gain', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    label:'Gain', color:'#2979ff', kind:'effect', ins:['signal'], outs:['signal'],
     params:{ gain:0.5 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Gain</span>
@@ -491,7 +624,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   pan: {
-    label:'Pan', color:'#5da0d0', kind:'effect', ins:['signal','pan_mod'], outs:['signal'],
+    label:'Pan', color:'#2979ff', kind:'effect', ins:['signal','pan_mod'], outs:['signal'],
     params:{ pan:0 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Pan</span>
@@ -501,7 +634,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   filter: {
-    label:'Filter', color:'#5da0d0', kind:'effect', ins:['signal','freq_mod'], outs:['signal'],
+    label:'Filter', color:'#2979ff', kind:'effect', ins:['signal','freq_mod'], outs:['signal'],
     params:{ type:'lowpass', freq:800, q:1 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Type</span>
@@ -519,7 +652,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   delay: {
-    label:'Delay', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    label:'Delay', color:'#2979ff', kind:'effect', ins:['signal'], outs:['signal'],
     params:{ time:0.3, feedback:0.4 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Time (s)</span>
@@ -532,7 +665,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   ping_pong: {
-    label:'Ping-Pong', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    label:'Ping-Pong', color:'#2979ff', kind:'effect', ins:['signal'], outs:['signal'],
     params:{ timeL:0.3, timeR:0.45, feedback:0.4, wet:0.5 },
     renderBody(id,p){ return `
     <div class="param-row"><span class="param-label">Time L</span>
@@ -549,7 +682,7 @@ const NODE_DEFS = {
         onchange="updateParam('${id}','wet',+this.value)"></div>`; }
   },
   reverb: {
-    label:'Reverb', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    label:'Reverb', color:'#2979ff', kind:'effect', ins:['signal'], outs:['signal'],
     params:{ duration:2, decay:2, wet:0.5 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Duration</span>
@@ -566,7 +699,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   distortion: {
-    label:'Distortion', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    label:'Distortion', color:'#2979ff', kind:'effect', ins:['signal'], outs:['signal'],
     params:{ amount:50 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Amount</span>
@@ -575,7 +708,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   compressor: {
-    label:'Compressor', color:'#5da0d0', kind:'effect', ins:['signal'], outs:['signal'],
+    label:'Compressor', color:'#2979ff', kind:'effect', ins:['signal'], outs:['signal'],
     params:{ threshold:-24, ratio:4, knee:10 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Threshold</span>
@@ -592,7 +725,7 @@ const NODE_DEFS = {
       </div>`; }
   },
   lfo: {
-    label:'LFO', color:'#d6a058', kind:'mod', ins:[], outs:['mod'],
+    label:'LFO', color:'#ffab00', kind:'mod', ins:[], outs:['mod'],
     params:{ freq:2, depth:100 },
     renderBody(id,p){ return `
       <div class="param-row"><span class="param-label">Rate (Hz)</span>
@@ -605,12 +738,12 @@ const NODE_DEFS = {
       </div>`; }
   },
   speaker: {
-    label:'Speaker', color:'#c97bff', kind:'sink', ins:['signal'], outs:[],
+    label:'Speaker', color:'#aa00ff', kind:'sink', ins:['signal'], outs:[],
     params:{},
     renderBody(id,p){ return `<div class="vu-bar"><div class="vu-fill" id="${id}-vu"></div></div>`; }
   },
   oscilloscope: {
-    label:'Oscilloscope', color:'#00dd66', kind:'sink', ins:['signal'], outs:[],
+    label:'Oscilloscope', color:'#aa00ff', kind:'sink', ins:['signal'], outs:[],
     params:{ zoom:1, mode:'standard' },
     renderBody(id,p){ return `
       <canvas class="scope-canvas" id="${id}-scope" width="158" height="80"></canvas>
@@ -626,7 +759,7 @@ const NODE_DEFS = {
   },
 
   spectrum: {
-    label:'Spectrum', color:'#00dd66', kind:'sink', ins:['signal'], outs:[],
+    label:'Spectrum', color:'#aa00ff', kind:'sink', ins:['signal'], outs:[],
     params:{ mode:'standard' },
     renderBody(id,p){ return `
       <canvas class="scope-canvas" id="${id}-scope" width="158" height="80"></canvas>
@@ -638,7 +771,7 @@ const NODE_DEFS = {
   },
 
   xy_scope: {
-    label:'XY Scope', color:'#00dd66', kind:'sink', ins:['x','y'], outs:[],
+    label:'XY Scope', color:'#aa00ff', kind:'sink', ins:['x','y'], outs:[],
     params:{ mode:'standard' },
     renderBody(id,p){ return `
       <canvas class="scope-canvas" id="${id}-scope" width="158" height="80"></canvas>
@@ -650,7 +783,7 @@ const NODE_DEFS = {
   },
 
   stereo_scope: {
-    label:'Stereo Scope', color:'#00dd66', kind:'sink', ins:['L','R'], outs:[],
+    label:'Stereo Scope', color:'#aa00ff', kind:'sink', ins:['L','R'], outs:[],
     params:{ mode:'standard' },
     renderBody(id,p){ return `
       <canvas class="scope-canvas" id="${id}-scope" width="158" height="80"></canvas>
@@ -662,7 +795,7 @@ const NODE_DEFS = {
   },
 
   mixer: {
-    label:'Mixer', color:'#9b7bda', kind:'effect',
+    label:'Mixer', color:'#2979ff', kind:'effect',
     ins:['ch1','ch2','ch3'], outs:['signal'],
     params:{ gain1:0.8, gain2:0.8, gain3:0.8 },
     renderBody(id,p){ return `
@@ -681,7 +814,7 @@ const NODE_DEFS = {
   },
 
   sequencer: {
-    label:'Sequencer', color:'#d6a058', kind:'mod',
+    label:'Sequencer', color:'#ffab00', kind:'mod',
     minWidth: 290,
     ins:[], outs:['freq'],
     params:{
@@ -713,6 +846,62 @@ const NODE_DEFS = {
       return steps;
     }
   },
+
+  drum_machine: {
+    label: 'Drum Machine', color: '#ff6d00', kind: 'source',
+    ins: [], outs: ['mix_out'],
+    params: {
+      bpm: 120, swing: 0,
+      kick_steps:    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], kick_vol:    0.9,
+      snare_steps:   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], snare_vol:   0.8,
+      clap_steps:    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], clap_vol:    0.7,
+      hihat_steps:   [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], hihat_vol:   0.7,
+      openhat_steps: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], openhat_vol: 0.6,
+      perc_steps:    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], perc_vol:    0.6,
+    },
+    renderBody(id, p) {
+      const CHS = [
+        { key:'kick',    label:'KICK',     color:'#ff4444' },
+        { key:'snare',   label:'SNARE',    color:'#ffab00' },
+        { key:'clap',    label:'CLAP',     color:'#ff8800' },
+        { key:'hihat',   label:'HI-HAT',   color:'#00e5ff' },
+        { key:'openhat', label:'OPEN HAT', color:'#69f0ae' },
+        { key:'perc',    label:'PERC',     color:'#e040fb' },
+      ];
+      let h = `<div class="dm-panel">`;
+      h += `<div class="dm-controls">
+        <button class="dm-btn" id="${id}-dm-btn" onclick="dmToggle('${id}')">▶ PLAY</button>
+        <span class="dm-label">BPM</span>
+        <input class="dm-bpm" type="number" min="30" max="300" value="${p.bpm}"
+          onchange="updateParam('${id}','bpm',+this.value);dmUpdateBpm('${id}')">
+        <span class="dm-label">SWING</span>
+        <input class="dm-swing" type="number" min="0" max="50" value="${p.swing}"
+          onchange="updateParam('${id}','swing',+this.value)">
+        <span class="dm-label">%</span>
+      </div>`;
+      CHS.forEach(ch => {
+        const steps = p[`${ch.key}_steps`];
+        const vol   = p[`${ch.key}_vol`];
+        h += `<div class="dm-channel">
+          <span class="dm-ch-label">${ch.label}</span>
+          <div class="dm-steps">`;
+        for (let i = 0; i < 16; i++) {
+          const on  = steps[i] ? ' on' : '';
+          const b1  = i % 4 === 0 ? ' beat1' : '';
+          const grp = i === 8 ? ' grp2' : '';
+          h += `<div class="dm-step${on}${b1}${grp}" id="${id}-step-${ch.key}-${i}"
+              onclick="dmToggleStep('${id}','${ch.key}',${i})"></div>`;
+        }
+        h += `</div>
+          <input class="dm-vol-r" type="range" min="0" max="1" step="0.01" value="${vol}"
+            title="${ch.label} vol" oninput="dmSetVol('${id}','${ch.key}',+this.value)">
+          <div class="dm-led" id="${id}-led-${ch.key}" style="--led-color:${ch.color}"></div>
+        </div>`;
+      });
+      h += `</div>`;
+      return h;
+    }
+  },
 };
 
 // ─── Version ─────────────────────────────────────────────────────────
@@ -734,17 +923,93 @@ function getEdgeSpring(edge){
 let audioCtx=null, audioNodes={}, masterGain=null;
 let rafId=null;
 let seqState={};
+let dmState={};  // drum machine scheduler state
 let canvasScale=1.0;
 let canvasOffset={x:0,y:0}; // pan offset in canvas space
 let isPanning=false, panStart={x:0,y:0}, panStartOffset={x:0,y:0};
 const ZOOM_MIN=0.15, ZOOM_MAX=4.0;
 const GRID=24;
 function snap(v){return Math.round(v/GRID)*GRID;}
+// ─── HP (Horizontal Pitch) grid — 1HP = 16px, rack row = 84HP ─────
+const HP = 16;
+const RACK_HP = 84;      // 84HP = 1344px per rack row
+const HP_WIDTHS = {      // module widths in HP units
+  oscillator:8, filter:8, gain:4, envelope:12, sequencer:16,
+  drum_machine:32, speaker:8, delay:10, reverb:10, distortion:10,
+  compressor:10, lfo:6, noise:6, mixer:10, keyboard:16, pan:4,
+  oscilloscope:10, spectrum:10, xy_scope:10, stereo_scope:10, ping_pong:10,
+};
+function snapHP(v){ return Math.round(v/HP)*HP; }
 let scopeHistory={}; // { [nodeId]: Uint8Array[] } — ring buffer for trippy echo
 let activeKbNode = null; // id of focused keyboard node
 
 const canvasEl = document.getElementById('canvas-area');
 const svgLayer = document.getElementById('svg-layer');
+
+// ─── Knob helpers ────────────────────────────────────────────────────
+function mapToRot(val, min, max) {
+  const pct = (max === min) ? 0 : Math.max(0, Math.min(1, (val - min) / (max - min)));
+  return -135 + pct * 270;
+}
+function formatKnobVal(v) {
+  const n = +v;
+  if (Math.abs(n) >= 1000) return (n/1000).toFixed(1)+'k';
+  if (Math.abs(n) >= 100)  return Math.round(n)+'';
+  if (Math.abs(n) >= 10)   return n.toFixed(1);
+  if (Math.abs(n) >= 1)    return n.toFixed(2);
+  return n.toFixed(3);
+}
+function initNodeKnobs(nodeEl) {
+  nodeEl.querySelectorAll('.param-input[type="number"]').forEach(input => {
+    const min  = input.min  !== '' ? +input.min  : 0;
+    const max  = input.max  !== '' ? +input.max  : 1;
+    const step = input.step !== '' ? +input.step : 0.01;
+    const val  = +input.value;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'knob-wrap';
+
+    const knobEl = document.createElement('div');
+    knobEl.className = 'knob';
+    knobEl.style.setProperty('--rot', mapToRot(val, min, max) + 'deg');
+
+    const kvEl = document.createElement('div');
+    kvEl.className = 'knob-val';
+    kvEl.textContent = formatKnobVal(val);
+
+    wrap.appendChild(knobEl);
+    wrap.appendChild(kvEl);
+
+    // Insert knob-wrap right before the input, then hide the input
+    input.parentNode.insertBefore(wrap, input);
+    input.style.display = 'none';
+
+    // Drag: up = increase, down = decrease
+    wrap.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      const startY   = e.clientY;
+      const startVal = +input.value;
+      const range    = max - min;
+
+      const onMove = e2 => {
+        const dy = startY - e2.clientY;
+        let nv = Math.max(min, Math.min(max, startVal + (dy / 140) * range));
+        if (step) nv = Math.round(nv / step) * step;
+        nv = parseFloat(nv.toFixed(8));
+        input.value = nv;
+        knobEl.style.setProperty('--rot', mapToRot(nv, min, max) + 'deg');
+        kvEl.textContent = formatKnobVal(nv);
+        input.dispatchEvent(new Event('change'));
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
+}
 
 // ─── Create node ─────────────────────────────────────────────────────
 function createNode(type, x, y, overrideParams={}) {
@@ -759,9 +1024,13 @@ function createNode(type, x, y, overrideParams={}) {
   nodes[id] = { id, type, def, x, y, params };
 
   const el = document.createElement('div');
-  el.className = 'node'; el.id = id;
+  el.className = 'node node-'+def.kind; el.id = id;
   el.style.left = x+'px'; el.style.top = y+'px';
   if (def.minWidth) el.style.minWidth = def.minWidth+'px';
+  // Apply HP-based fixed width
+  const hpW = (HP_WIDTHS[type] || 8) * HP;
+  el.style.width    = hpW + 'px';
+  el.style.minWidth = hpW + 'px';
 
   const inPorts  = def.ins.map(p=>`
     <div class="port in" data-node="${id}" data-port="${p}" data-dir="in">
@@ -770,11 +1039,12 @@ function createNode(type, x, y, overrideParams={}) {
     </div>`).join('');
   const outPorts = def.outs.map(p=>`
     <div class="port out" data-node="${id}" data-port="${p}" data-dir="out">
-      <span class="port-label">${p}</span>
       <div class="port-dot out" data-node="${id}" data-port="${p}" data-dir="out"></div>
+      <span class="port-label">${p}</span>
     </div>`).join('');
 
   el.innerHTML = `
+    <div class="rack-handle" data-node="${id}"></div>
     <div class="node-header" data-node="${id}">
       <div class="node-color-dot" style="background:${def.color}"></div>
       <span class="node-title">${def.label}</span>
@@ -784,11 +1054,13 @@ function createNode(type, x, y, overrideParams={}) {
     <div class="node-ports">
       <div class="ports-in">${inPorts}</div>
       <div class="ports-out">${outPorts}</div>
-    </div>`;
+    </div>
+    <div class="rack-handle bottom" data-node="${id}"></div>`;
 
   canvasEl.appendChild(el);
-  el.querySelector('.node-header').addEventListener('mousedown', onHeaderMousedown);
+  el.querySelectorAll('.node-header, .rack-handle').forEach(h => h.addEventListener('mousedown', onHeaderMousedown));
   el.querySelectorAll('.port-dot').forEach(d => d.addEventListener('mousedown', onPortMousedown));
+  initNodeKnobs(el);
   if (type === 'envelope') requestAnimationFrame(() => drawEnvelope(id));
   updateStats();
   return id;
@@ -956,7 +1228,7 @@ function drawEnvelope(id) {
   });
 
   // Section labels
-  ctx.font = '8px IBM Plex Mono, monospace';
+  ctx.font = '8px Share Tech Mono, monospace';
   ctx.fillStyle = '#484f58';
   const lY = H - 1;
   ctx.fillText('A', (x0 + x1) / 2 - 3, lY);
@@ -1015,6 +1287,201 @@ function updateStepFreq(id, i, val) {
   nodes[id].params.notes[i] = val;
 }
 
+// ─── Drum Machine helpers ────────────────────────────────────────────
+const DM_CHS = ['kick','snare','clap','hihat','openhat','perc'];
+
+function dmToggleStep(id, ch, step) {
+  if (!nodes[id]) return;
+  const steps = nodes[id].params[`${ch}_steps`];
+  steps[step] = steps[step] ? 0 : 1;
+  document.getElementById(`${id}-step-${ch}-${step}`)?.classList.toggle('on', !!steps[step]);
+}
+function dmSetVol(id, ch, val) {
+  if (!nodes[id]) return;
+  nodes[id].params[`${ch}_vol`] = val;
+}
+function dmUpdateBpm(id) {
+  if (!dmState[id]?.intervalId) return;
+  dmStop(id); dmStart(id);
+}
+function dmToggle(id) {
+  if (!audioCtx) { alert('Press ▶ Play first to start the audio engine.'); return; }
+  if (dmState[id]?.intervalId) dmStop(id); else dmStart(id);
+}
+function dmStart(id) {
+  if (!audioCtx || !nodes[id] || !audioNodes[id]) return;
+  if (dmState[id]?.intervalId) return; // already running
+  nodes[id].params.playing = true;
+  const btn = document.getElementById(`${id}-dm-btn`);
+  if (btn) { btn.textContent = '■ STOP'; btn.classList.add('running'); }
+  dmState[id] = { currentStep: 0, nextNoteTime: audioCtx.currentTime + 0.05 };
+  const AHEAD = 0.1; // 100ms lookahead
+  function scheduler() {
+    if (!audioCtx || !nodes[id] || !audioNodes[id]) return;
+    const p = nodes[id].params;
+    const spb = 60 / p.bpm;      // seconds per beat
+    const sps = spb / 4;          // seconds per 16th-note step
+    const out = audioNodes[id].output;
+    while (dmState[id].nextNoteTime < audioCtx.currentTime + AHEAD) {
+      const step = dmState[id].currentStep;
+      const t    = dmState[id].nextNoteTime;
+      const swingOffset = (step % 2 === 1) ? (p.swing / 100) * sps * 0.67 : 0;
+      const st = t + swingOffset;
+      DM_CHS.forEach(ch => {
+        if (p[`${ch}_steps`][step]) {
+          const vol = p[`${ch}_vol`] ?? 0.7;
+          switch(ch) {
+            case 'kick':    dmSynthKick(audioCtx, out, st, vol); break;
+            case 'snare':   dmSynthSnare(audioCtx, out, st, vol); break;
+            case 'clap':    dmSynthClap(audioCtx, out, st, vol); break;
+            case 'hihat':   dmSynthHihat(audioCtx, out, st, vol); break;
+            case 'openhat': dmSynthOpenhat(audioCtx, out, st, vol); break;
+            case 'perc':    dmSynthPerc(audioCtx, out, st, vol); break;
+          }
+          // Schedule LED pulse
+          const ledMs = Math.max(0, (st - audioCtx.currentTime) * 1000);
+          setTimeout(() => {
+            const led = document.getElementById(`${id}-led-${ch}`);
+            if (led) { led.classList.add('active'); setTimeout(()=>led.classList.remove('active'), 80); }
+          }, ledMs);
+        }
+      });
+      // Schedule step highlight
+      const hlMs = Math.max(0, (t - audioCtx.currentTime) * 1000);
+      const stepCopy = step;
+      setTimeout(() => {
+        if (!nodes[id]) return;
+        DM_CHS.forEach(ch => {
+          for (let i=0;i<16;i++) document.getElementById(`${id}-step-${ch}-${i}`)?.classList.remove('playing');
+          document.getElementById(`${id}-step-${ch}-${stepCopy}`)?.classList.add('playing');
+        });
+      }, hlMs);
+      dmState[id].nextNoteTime += sps;
+      dmState[id].currentStep = (step + 1) % 16;
+    }
+  }
+  scheduler();
+  dmState[id].intervalId = setInterval(scheduler, 25);
+}
+function dmStop(id) {
+  if (dmState[id]?.intervalId) { clearInterval(dmState[id].intervalId); delete dmState[id]; }
+  if (nodes[id]) nodes[id].params.playing = false;
+  const btn = document.getElementById(`${id}-dm-btn`);
+  if (btn) { btn.textContent = '▶ PLAY'; btn.classList.remove('running'); }
+  DM_CHS.forEach(ch => {
+    for (let i=0;i<16;i++) document.getElementById(`${id}-step-${ch}-${i}`)?.classList.remove('playing');
+  });
+}
+
+// ─── Drum synthesis functions ─────────────────────────────────────────
+function dmSynthKick(ctx, dst, t, vol) {
+  const osc = ctx.createOscillator();
+  const ws  = ctx.createWaveShaper();
+  const env = ctx.createGain();
+  const out = ctx.createGain();
+  ws.curve = makeDistortionCurve(25); ws.oversample = '2x';
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, t);
+  osc.frequency.exponentialRampToValueAtTime(50, t + 0.08);
+  env.gain.setValueAtTime(0.001, t);
+  env.gain.exponentialRampToValueAtTime(1.0, t + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  out.gain.value = vol * 1.2;
+  osc.connect(ws); ws.connect(env); env.connect(out); out.connect(dst);
+  osc.start(t); osc.stop(t + 0.5);
+}
+function dmSynthSnare(ctx, dst, t, vol) {
+  const sr = ctx.sampleRate;
+  // Noise burst through bandpass
+  const nBuf = ctx.createBuffer(1, sr*0.15, sr);
+  const nd   = nBuf.getChannelData(0);
+  for (let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+  const nSrc = ctx.createBufferSource(); nSrc.buffer = nBuf;
+  const bpf  = ctx.createBiquadFilter(); bpf.type='bandpass'; bpf.frequency.value=200; bpf.Q.value=0.8;
+  const nEnv = ctx.createGain();
+  nEnv.gain.setValueAtTime(0.001,t); nEnv.gain.exponentialRampToValueAtTime(0.9,t+0.002);
+  nEnv.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+  // Tuned body
+  const body = ctx.createOscillator(); body.type='sine'; body.frequency.value=185;
+  const bEnv = ctx.createGain();
+  bEnv.gain.setValueAtTime(0.001,t); bEnv.gain.exponentialRampToValueAtTime(0.7,t+0.002);
+  bEnv.gain.exponentialRampToValueAtTime(0.001,t+0.075);
+  const out = ctx.createGain(); out.gain.value=vol;
+  nSrc.connect(bpf); bpf.connect(nEnv); nEnv.connect(out);
+  body.connect(bEnv); bEnv.connect(out); out.connect(dst);
+  nSrc.start(t); nSrc.stop(t+0.18); body.start(t); body.stop(t+0.1);
+}
+function dmSynthClap(ctx, dst, t, vol) {
+  const sr  = ctx.sampleRate;
+  const out = ctx.createGain(); out.gain.value=vol; out.connect(dst);
+  [0, 0.0025, 0.005, 0.0085].forEach((delay, i) => {
+    const tt = t + delay;
+    const isLast = i===3;
+    const dur = isLast ? 0.09 : 0.004;
+    const buf = ctx.createBuffer(1, Math.ceil(sr*(isLast?0.1:0.006)), sr);
+    const d   = buf.getChannelData(0);
+    for (let j=0;j<d.length;j++) d[j]=Math.random()*2-1;
+    const src = ctx.createBufferSource(); src.buffer=buf;
+    const hpf = ctx.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=1000;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.001,tt); env.gain.exponentialRampToValueAtTime(isLast?1.0:0.6,tt+0.001);
+    env.gain.exponentialRampToValueAtTime(0.001,tt+dur);
+    src.connect(hpf); hpf.connect(env); env.connect(out);
+    src.start(tt); src.stop(tt+dur+0.01);
+  });
+}
+function dmSynthHihat(ctx, dst, t, vol) {
+  const sr  = ctx.sampleRate;
+  const buf = ctx.createBuffer(1, Math.ceil(sr*0.05), sr);
+  const d   = buf.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const src = ctx.createBufferSource(); src.buffer=buf;
+  const hpf = ctx.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=8000;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.001,t); env.gain.exponentialRampToValueAtTime(0.9,t+0.001);
+  env.gain.exponentialRampToValueAtTime(0.001,t+0.04);
+  const out = ctx.createGain(); out.gain.value=vol;
+  src.connect(hpf); hpf.connect(env); env.connect(out); out.connect(dst);
+  src.start(t); src.stop(t+0.06);
+}
+function dmSynthOpenhat(ctx, dst, t, vol) {
+  const sr  = ctx.sampleRate;
+  const buf = ctx.createBuffer(1, Math.ceil(sr*0.35), sr);
+  const d   = buf.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const src = ctx.createBufferSource(); src.buffer=buf;
+  const hpf = ctx.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=7000; hpf.Q.value=2.5;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.001,t); env.gain.exponentialRampToValueAtTime(0.9,t+0.002);
+  env.gain.exponentialRampToValueAtTime(0.001,t+0.3);
+  const out = ctx.createGain(); out.gain.value=vol;
+  src.connect(hpf); hpf.connect(env); env.connect(out); out.connect(dst);
+  src.start(t); src.stop(t+0.38);
+}
+function dmSynthPerc(ctx, dst, t, vol) {
+  const sr  = ctx.sampleRate;
+  // Noise burst
+  const buf = ctx.createBuffer(1, Math.ceil(sr*0.06), sr);
+  const d   = buf.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const nSrc = ctx.createBufferSource(); nSrc.buffer=buf;
+  const bpf  = ctx.createBiquadFilter(); bpf.type='bandpass'; bpf.frequency.value=450; bpf.Q.value=1.2;
+  const nEnv = ctx.createGain();
+  nEnv.gain.setValueAtTime(0.001,t); nEnv.gain.exponentialRampToValueAtTime(0.8,t+0.001);
+  nEnv.gain.exponentialRampToValueAtTime(0.001,t+0.055);
+  // Pitch-drop oscillator
+  const osc = ctx.createOscillator(); osc.type='sine';
+  osc.frequency.setValueAtTime(380, t);
+  osc.frequency.exponentialRampToValueAtTime(90, t+0.07);
+  const oEnv = ctx.createGain();
+  oEnv.gain.setValueAtTime(0.001,t); oEnv.gain.exponentialRampToValueAtTime(1.0,t+0.002);
+  oEnv.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+  const out = ctx.createGain(); out.gain.value=vol;
+  nSrc.connect(bpf); bpf.connect(nEnv); nEnv.connect(out);
+  osc.connect(oEnv); oEnv.connect(out); out.connect(dst);
+  nSrc.start(t); nSrc.stop(t+0.08); osc.start(t); osc.stop(t+0.12);
+}
+
 // ─── Drag nodes ──────────────────────────────────────────────────────
 function onHeaderMousedown(e) {
   if (e.target.classList.contains('delete-btn')) return;
@@ -1037,6 +1504,16 @@ document.addEventListener('mousemove', e => {
     el.style.left = x+'px'; el.style.top = y+'px';
     nodes[dragging].x = x; nodes[dragging].y = y;
     renderEdges();
+    // HP overlap detection — tint nodes that collide with the dragged module
+    const dw = el.offsetWidth, dh = el.offsetHeight;
+    Object.keys(nodes).forEach(oid => {
+      if (oid === dragging) return;
+      const oel = document.getElementById(oid);
+      if (!oel) return;
+      const ox=nodes[oid].x, oy=nodes[oid].y, ow=oel.offsetWidth, oh=oel.offsetHeight;
+      const overlaps = x < ox+ow && x+dw > ox && y < oy+oh && y+dh > oy;
+      oel.classList.toggle('hp-overlap', overlaps);
+    });
   }
   if (connecting && !isPanning) {
     const cr = canvasEl.getBoundingClientRect();
@@ -1075,11 +1552,13 @@ document.addEventListener('mouseup', e=>{
     // Drop bounce: connected wires spring, then ripple to one-hop neighbors
     const dropped=dragging;
     dragging=null;
-    // Snap to grid on release
-    const sx=snap(nodes[dropped].x), sy=snap(nodes[dropped].y);
+    // Snap x to HP grid, y to 24px dot grid
+    const sx=snapHP(nodes[dropped].x), sy=snap(nodes[dropped].y);
     nodes[dropped].x=sx; nodes[dropped].y=sy;
     const snapEl=document.getElementById(dropped);
     if(snapEl){snapEl.style.left=sx+'px'; snapEl.style.top=sy+'px';}
+    // Clear all overlap highlights
+    document.querySelectorAll('.node.hp-overlap').forEach(el=>el.classList.remove('hp-overlap'));
     renderEdges();
     // Node land animation
     const landEl=document.getElementById(dropped);
@@ -1147,18 +1626,19 @@ function addEdge(sN,sP,dN,dP) {
   if (edges.find(e=>e.srcNode===sN&&e.srcPort===sP&&e.dstNode===dN&&e.dstPort===dP)) return;
   const edge={id:'e'+edges.length,srcNode:sN,srcPort:sP,dstNode:dN,dstPort:dP};
   edges.push(edge);
-  // Spring: start pulled upward, bounces into place
-  edgeSprings[edgeSpringKey(edge)]={y:-45,vy:0};
+  // Spring: start pulled upward, falls and bounces into natural droop
+  edgeSprings[edgeSpringKey(edge)]={y:-80,vy:0};
   renderEdges(); updateStats();
 }
 function deleteEdge(idx){edges.splice(idx,1);renderEdges();updateStats();}
 function deleteNode(id){
   // Flash-delete connected wires first
-  edgeEls.forEach(({pathEl,hitEl,edge})=>{
+  edgeEls.forEach(({pathEl,hitEl,shadowEl,edge})=>{
     if(edge.srcNode===id||edge.dstNode===id){
       pathEl.style.transition='stroke 0.12s, opacity 0.18s';
       pathEl.style.stroke='#f85149'; pathEl.style.opacity='0';
       hitEl.style.pointerEvents='none';
+      if(shadowEl){ shadowEl.style.transition='opacity 0.18s'; shadowEl.style.opacity='0'; }
     }
   });
   const el=document.getElementById(id);
@@ -1189,21 +1669,45 @@ function getPortPos(nodeId,portName,dir){
   return{x:(r.left-cr.left)/canvasScale - canvasOffset.x, y:(r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y};
 }
 function bezier(x1,y1,x2,y2,extraSag=0){
-  const dx=Math.max(Math.abs(x2-x1)*0.5,40);
-  const dist=Math.hypot(x2-x1,y2-y1);
-  const sag=Math.min(dist*0.18,70)+extraSag; // gravity droop — longer = more sag
-  return`M${x1} ${y1} C${x1+dx} ${y1+sag*0.55},${x2-dx} ${y2+sag*0.55},${x2} ${y2}`;
+  const dist = Math.hypot(x2-x1, y2-y1);
+  // Simulate all cables having a fixed physical length — excess becomes sag
+  const CABLE_LEN = Math.max(dist * 1.5, 320); // every cable is at least 320px "long"
+  const slack = CABLE_LEN - dist;
+  const sag = Math.min(slack * 0.38 + 45, 210) + extraSag;
+
+  // Horizontal routing: only as wide as the actual x-gap (stops weird sideways kinks)
+  const hGap = x2 - x1;
+  const dx = Math.max(Math.abs(hGap) * 0.35, 20);
+
+  // Control points pull downward (gravity) — same Y offset regardless of angle
+  return `M${x1} ${y1} C${x1+dx} ${y1+sag*0.85},${x2-dx} ${y2+sag*0.85},${x2} ${y2}`;
 }
+// Eurorack patch cable color palette — distinct, saturated, like real modular cables
+const CABLE_COLORS = [
+  '#ff3d3d', // red
+  '#ffab00', // amber
+  '#00e676', // green
+  '#40c4ff', // light blue
+  '#ff6d00', // orange
+  '#e040fb', // magenta
+  '#00e5ff', // cyan
+  '#ffff00', // yellow
+  '#ff4081', // pink
+  '#69f0ae', // mint
+  '#448aff', // blue
+  '#ff6e40', // deep orange
+];
+
 function renderEdges(){
-  svgLayer.querySelectorAll('.edge-path,.edge-hit').forEach(p=>p.remove());
+  svgLayer.querySelectorAll('.edge-path,.edge-hit,.edge-shadow,.edge-tip').forEach(p=>p.remove());
   edgeEls=[];
   edges.forEach((edge,idx)=>{
     if(!nodes[edge.srcNode]||!nodes[edge.dstNode]) return;
     const src=getPortPos(edge.srcNode,edge.srcPort,'out');
     const dst=getPortPos(edge.dstNode,edge.dstPort,'in');
     const d=bezier(src.x,src.y,dst.x,dst.y);
-    const isGate = edge.srcPort==='gate'||edge.dstPort==='gate';
-    const color = isGate ? '#d6a058' : nodes[edge.srcNode].def.color;
+    // Each cable gets its own color from the palette by index
+    const color = CABLE_COLORS[idx % CABLE_COLORS.length];
 
     function grabEdge(e){
       e.preventDefault(); e.stopPropagation();
@@ -1218,26 +1722,44 @@ function renderEdges(){
       connecting={nodeId:fixedNode, port:fixedPort, dir:fixedDir};
     }
 
+    // Shadow pass — gives cable depth/thickness illusion
+    const shadow=document.createElementNS('http://www.w3.org/2000/svg','path');
+    shadow.classList.add('edge-shadow'); shadow.setAttribute('d',d);
+    shadow.setAttribute('stroke','#000000');
+    svgLayer.insertBefore(shadow,previewPath);
+
+    // Hit target
     const hit=document.createElementNS('http://www.w3.org/2000/svg','path');
     hit.classList.add('edge-hit'); hit.setAttribute('d',d);
     hit.addEventListener('mousedown', grabEdge);
     svgLayer.insertBefore(hit,previewPath);
 
+    // Cable path
     const path=document.createElementNS('http://www.w3.org/2000/svg','path');
     path.classList.add('edge-path'); path.setAttribute('d',d); path.setAttribute('stroke',color);
-    if(isGate) path.setAttribute('stroke-dasharray','6 4');
     path.addEventListener('mousedown', grabEdge);
     svgLayer.insertBefore(path,previewPath);
 
+    // Jack tip circles at both ends — look like the cable plug
+    [src, dst].forEach(pt => {
+      const tip=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      tip.classList.add('edge-tip');
+      tip.setAttribute('cx', pt.x); tip.setAttribute('cy', pt.y);
+      tip.setAttribute('r', '5');
+      tip.setAttribute('fill', color);
+      tip.setAttribute('stroke', '#000'); tip.setAttribute('stroke-width', '1.5');
+      svgLayer.insertBefore(tip, previewPath);
+    });
+
     // Store refs for wire animation
-    edgeEls.push({pathEl:path, hitEl:hit, edge});
+    edgeEls.push({pathEl:path, hitEl:hit, shadowEl:shadow, edge});
   });
 }
 
 // ─── Wire physics animation ──────────────────────────────────────────
 function animateWires(){
   wireRafId=requestAnimationFrame(animateWires);
-  edgeEls.forEach(({pathEl,hitEl,edge})=>{
+  edgeEls.forEach(({pathEl,hitEl,shadowEl,edge})=>{
     if(!nodes[edge.srcNode]||!nodes[edge.dstNode]) return;
     const src=getPortPos(edge.srcNode,edge.srcPort,'out');
     const dst=getPortPos(edge.dstNode,edge.dstPort,'in');
@@ -1251,6 +1773,7 @@ function animateWires(){
     const d=bezier(src.x,src.y,dst.x,dst.y,sp.y);
     pathEl.setAttribute('d',d);
     hitEl.setAttribute('d',d);
+    if(shadowEl) shadowEl.setAttribute('d',d);
   });
 }
 animateWires(); // DOM is ready since script is at end of body
@@ -1457,6 +1980,12 @@ function startAudio(){
         audioNodes[n.id]={main:envGain,input:envGain,output:envGain};
         break;
       }
+      case'drum_machine':{
+        // Drum machine — output GainNode collects all synthesized voices
+        const dmOut=audioCtx.createGain(); dmOut.gain.value=1.0;
+        audioNodes[n.id]={main:dmOut,input:null,output:dmOut};
+        break;
+      }
     }
   });
 
@@ -1502,6 +2031,12 @@ function startAudio(){
     };
     tick(); // fire first step immediately
     seqState[n.id].intervalId=setInterval(tick, 60000/+n.params.bpm);
+  });
+
+  // Start drum machines that were playing before audio restart
+  Object.values(nodes).filter(n=>n.type==='drum_machine').forEach(n=>{
+    // Auto-start only if params.playing was true (e.g. preset restore)
+    if (n.params.playing) setTimeout(()=>dmStart(n.id), 100);
   });
 
   // Animation loop — VU + scope
@@ -1917,6 +2452,16 @@ function stopAudio(){
     for(let i=0;i<8;i++) document.getElementById(`${id}-s${i}`)?.classList.remove('playing');
   });
   seqState={};
+  // Stop drum machine schedulers
+  Object.keys(dmState).forEach(id=>{
+    clearInterval(dmState[id].intervalId);
+    const CHS=['kick','snare','clap','hihat','openhat','perc'];
+    CHS.forEach(ch=>{ for(let i=0;i<16;i++) document.getElementById(`${id}-step-${ch}-${i}`)?.classList.remove('playing'); });
+    const btn=document.getElementById(`${id}-dm-btn`);
+    if(btn){btn.textContent='▶ PLAY';btn.classList.remove('running');}
+    if(nodes[id]) nodes[id].params.playing=false;
+  });
+  dmState={};
   Object.values(audioNodes).forEach(an=>{
     try{if(an.osc)an.osc.stop();else if(an.main?.stop)an.main.stop();}catch(e){}
     try{if(an.main?.disconnect)an.main.disconnect();}catch(e){}
@@ -2125,6 +2670,27 @@ function loadPreset(name){
         addEdge(flt,'signal', rev,'signal');
         addEdge(rev,'signal', spk,'signal');
         addEdge(env,'signal', scp,'signal');  // scope shows envelope-shaped waveform
+        renderEdges();
+      },50); break;
+    }
+
+    case'drum_loop': {
+      // Kick: 1,5,9,13 | Snare: 5,13 | Closed HH: every even step | Open HH: 7,15
+      const dm  = createNode('drum_machine', 30, 60, {
+        bpm: 120,
+        kick_steps:    [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+        snare_steps:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+        clap_steps:    [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+        hihat_steps:   [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1],
+        openhat_steps: [0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0],
+        perc_steps:    [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+        kick_vol:0.95, snare_vol:0.85, hihat_vol:0.65, openhat_vol:0.6,
+      });
+      const cmp = createNode('compressor', 600, 80, {threshold:-18, ratio:4, knee:6});
+      const spk = createNode('speaker',    820, 80);
+      setTimeout(()=>{
+        addEdge(dm, 'mix_out', cmp,'signal');
+        addEdge(cmp,'signal',  spk,'signal');
         renderEdges();
       },50); break;
     }
