@@ -77,10 +77,12 @@
   #svg-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
   }
-  .edge-path { fill: none; stroke-width: 3; opacity: 0.8; transition: opacity 0.15s; pointer-events: visibleStroke; cursor: grab; }
-  .edge-path:hover { opacity: 1; }
-  .edge-hit { fill: none; stroke: transparent; stroke-width: 16; cursor: grab; pointer-events: stroke; }
-  .edge-preview { fill: none; stroke: #aa00ff; stroke-width: 2.5; stroke-dasharray: 6,4; opacity: 0.5; pointer-events: none; }
+  .edge-path { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.88; transition: opacity 0.15s, filter 0.15s; pointer-events: visibleStroke; cursor: grab; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.7)); }
+  .edge-path:hover { opacity: 1; filter: drop-shadow(0 2px 6px rgba(255,255,255,0.15)); }
+  .edge-shadow { fill: none; stroke-width: 7; stroke-linecap: round; opacity: 0.25; pointer-events: none; }
+  .edge-tip { pointer-events: none; }
+  .edge-hit { fill: none; stroke: transparent; stroke-width: 20; cursor: grab; pointer-events: stroke; }
+  .edge-preview { fill: none; stroke: #aa00ff; stroke-width: 4; stroke-linecap: round; opacity: 0.5; pointer-events: none; }
 
   /* ── Nodes — Eurorack panels ── */
   .node {
@@ -1296,11 +1298,12 @@ function addEdge(sN,sP,dN,dP) {
 function deleteEdge(idx){edges.splice(idx,1);renderEdges();updateStats();}
 function deleteNode(id){
   // Flash-delete connected wires first
-  edgeEls.forEach(({pathEl,hitEl,edge})=>{
+  edgeEls.forEach(({pathEl,hitEl,shadowEl,edge})=>{
     if(edge.srcNode===id||edge.dstNode===id){
       pathEl.style.transition='stroke 0.12s, opacity 0.18s';
       pathEl.style.stroke='#f85149'; pathEl.style.opacity='0';
       hitEl.style.pointerEvents='none';
+      if(shadowEl){ shadowEl.style.transition='opacity 0.18s'; shadowEl.style.opacity='0'; }
     }
   });
   const el=document.getElementById(id);
@@ -1331,23 +1334,37 @@ function getPortPos(nodeId,portName,dir){
   return{x:(r.left-cr.left)/canvasScale - canvasOffset.x, y:(r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y};
 }
 function bezier(x1,y1,x2,y2,extraSag=0){
-  const dx=Math.max(Math.abs(x2-x1)*0.5,40);
+  const dx=Math.max(Math.abs(x2-x1)*0.5,50);
   const dist=Math.hypot(x2-x1,y2-y1);
-  const sag=Math.min(dist*0.18,70)+extraSag; // gravity droop — longer = more sag
-  return`M${x1} ${y1} C${x1+dx} ${y1+sag*0.55},${x2-dx} ${y2+sag*0.55},${x2} ${y2}`;
+  const sag=Math.min(dist*0.32,120)+extraSag; // heavier droop — cable physics
+  return`M${x1} ${y1} C${x1+dx} ${y1+sag*0.7},${x2-dx} ${y2+sag*0.7},${x2} ${y2}`;
 }
+// Eurorack patch cable color palette — distinct, saturated, like real modular cables
+const CABLE_COLORS = [
+  '#ff3d3d', // red
+  '#ffab00', // amber
+  '#00e676', // green
+  '#40c4ff', // light blue
+  '#ff6d00', // orange
+  '#e040fb', // magenta
+  '#00e5ff', // cyan
+  '#ffff00', // yellow
+  '#ff4081', // pink
+  '#69f0ae', // mint
+  '#448aff', // blue
+  '#ff6e40', // deep orange
+];
+
 function renderEdges(){
-  svgLayer.querySelectorAll('.edge-path,.edge-hit').forEach(p=>p.remove());
+  svgLayer.querySelectorAll('.edge-path,.edge-hit,.edge-shadow,.edge-tip').forEach(p=>p.remove());
   edgeEls=[];
   edges.forEach((edge,idx)=>{
     if(!nodes[edge.srcNode]||!nodes[edge.dstNode]) return;
     const src=getPortPos(edge.srcNode,edge.srcPort,'out');
     const dst=getPortPos(edge.dstNode,edge.dstPort,'in');
     const d=bezier(src.x,src.y,dst.x,dst.y);
-    const isGate = edge.srcPort==='gate'||edge.dstPort==='gate';
-    const srcKind = nodes[edge.srcNode].def.kind;
-    const kindColor = srcKind==='source'?'#00c853':srcKind==='effect'?'#2979ff':srcKind==='mod'?'#ffab00':'#aa00ff';
-    const color = isGate ? '#ff1744' : nodes[edge.srcNode].def.color || kindColor;
+    // Each cable gets its own color from the palette by index
+    const color = CABLE_COLORS[idx % CABLE_COLORS.length];
 
     function grabEdge(e){
       e.preventDefault(); e.stopPropagation();
@@ -1362,26 +1379,44 @@ function renderEdges(){
       connecting={nodeId:fixedNode, port:fixedPort, dir:fixedDir};
     }
 
+    // Shadow pass — gives cable depth/thickness illusion
+    const shadow=document.createElementNS('http://www.w3.org/2000/svg','path');
+    shadow.classList.add('edge-shadow'); shadow.setAttribute('d',d);
+    shadow.setAttribute('stroke','#000000');
+    svgLayer.insertBefore(shadow,previewPath);
+
+    // Hit target
     const hit=document.createElementNS('http://www.w3.org/2000/svg','path');
     hit.classList.add('edge-hit'); hit.setAttribute('d',d);
     hit.addEventListener('mousedown', grabEdge);
     svgLayer.insertBefore(hit,previewPath);
 
+    // Cable path
     const path=document.createElementNS('http://www.w3.org/2000/svg','path');
     path.classList.add('edge-path'); path.setAttribute('d',d); path.setAttribute('stroke',color);
-    if(isGate) path.setAttribute('stroke-dasharray','6 4');
     path.addEventListener('mousedown', grabEdge);
     svgLayer.insertBefore(path,previewPath);
 
+    // Jack tip circles at both ends — look like the cable plug
+    [src, dst].forEach(pt => {
+      const tip=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      tip.classList.add('edge-tip');
+      tip.setAttribute('cx', pt.x); tip.setAttribute('cy', pt.y);
+      tip.setAttribute('r', '5');
+      tip.setAttribute('fill', color);
+      tip.setAttribute('stroke', '#000'); tip.setAttribute('stroke-width', '1.5');
+      svgLayer.insertBefore(tip, previewPath);
+    });
+
     // Store refs for wire animation
-    edgeEls.push({pathEl:path, hitEl:hit, edge});
+    edgeEls.push({pathEl:path, hitEl:hit, shadowEl:shadow, edge});
   });
 }
 
 // ─── Wire physics animation ──────────────────────────────────────────
 function animateWires(){
   wireRafId=requestAnimationFrame(animateWires);
-  edgeEls.forEach(({pathEl,hitEl,edge})=>{
+  edgeEls.forEach(({pathEl,hitEl,shadowEl,edge})=>{
     if(!nodes[edge.srcNode]||!nodes[edge.dstNode]) return;
     const src=getPortPos(edge.srcNode,edge.srcPort,'out');
     const dst=getPortPos(edge.dstNode,edge.dstPort,'in');
@@ -1395,6 +1430,7 @@ function animateWires(){
     const d=bezier(src.x,src.y,dst.x,dst.y,sp.y);
     pathEl.setAttribute('d',d);
     hitEl.setAttribute('d',d);
+    if(shadowEl) shadowEl.setAttribute('d',d);
   });
 }
 animateWires(); // DOM is ready since script is at end of body
