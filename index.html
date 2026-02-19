@@ -1313,8 +1313,8 @@ function addEdge(sN,sP,dN,dP) {
   if (edges.find(e=>e.srcNode===sN&&e.srcPort===sP&&e.dstNode===dN&&e.dstPort===dP)) return;
   const edge={id:'e'+edges.length,srcNode:sN,srcPort:sP,dstNode:dN,dstPort:dP};
   edges.push(edge);
-  // Spring: start pulled upward, bounces into place
-  edgeSprings[edgeSpringKey(edge)]={y:-45,vy:0};
+  // Spring: start pulled upward, falls and bounces into natural droop
+  edgeSprings[edgeSpringKey(edge)]={y:-80,vy:0};
   renderEdges(); updateStats();
 }
 function deleteEdge(idx){edges.splice(idx,1);renderEdges();updateStats();}
@@ -1356,10 +1356,18 @@ function getPortPos(nodeId,portName,dir){
   return{x:(r.left-cr.left)/canvasScale - canvasOffset.x, y:(r.top+r.height/2-cr.top)/canvasScale - canvasOffset.y};
 }
 function bezier(x1,y1,x2,y2,extraSag=0){
-  const dx=Math.max(Math.abs(x2-x1)*0.5,50);
-  const dist=Math.hypot(x2-x1,y2-y1);
-  const sag=Math.min(dist*0.32,120)+extraSag; // heavier droop — cable physics
-  return`M${x1} ${y1} C${x1+dx} ${y1+sag*0.7},${x2-dx} ${y2+sag*0.7},${x2} ${y2}`;
+  const dist = Math.hypot(x2-x1, y2-y1);
+  // Simulate all cables having a fixed physical length — excess becomes sag
+  const CABLE_LEN = Math.max(dist * 1.5, 320); // every cable is at least 320px "long"
+  const slack = CABLE_LEN - dist;
+  const sag = Math.min(slack * 0.38 + 45, 210) + extraSag;
+
+  // Horizontal routing: only as wide as the actual x-gap (stops weird sideways kinks)
+  const hGap = x2 - x1;
+  const dx = Math.max(Math.abs(hGap) * 0.35, 20);
+
+  // Control points pull downward (gravity) — same Y offset regardless of angle
+  return `M${x1} ${y1} C${x1+dx} ${y1+sag*0.85},${x2-dx} ${y2+sag*0.85},${x2} ${y2}`;
 }
 // Eurorack patch cable color palette — distinct, saturated, like real modular cables
 const CABLE_COLORS = [
