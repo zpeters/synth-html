@@ -68,12 +68,10 @@
   #canvas-area {
     position: fixed; top: 44px; left: 180px; right: 0; bottom: 0; overflow: hidden;
     transform-origin: 0 0;
-    background: #0a0a0a;
-    /* HP grid (16px) + 24px horizontal dots + rack rails every 300px */
-    background-image:
-      repeating-linear-gradient(90deg, transparent 15px, rgba(24,24,24,0.9) 15px, rgba(24,24,24,0.9) 16px),
-      repeating-linear-gradient(0deg, transparent 23px, #0d0d0d 23px, #0d0d0d 24px),
-      repeating-linear-gradient(0deg, transparent 293px, #1a1a1a 293px, #252525 295px, #2a2a2a 298px, #252525 300px, #1a1a1a 302px, transparent 302px, transparent 600px);
+    background: #080808;
+    /* Dot grid at HP intervals (16px × 24px) */
+    background-image: radial-gradient(circle, rgba(52,52,52,0.85) 1px, transparent 1px);
+    background-size: 16px 24px;
   }
   #canvas-area.panning { cursor: grab; }
   #canvas-area.panning:active { cursor: grabbing; }
